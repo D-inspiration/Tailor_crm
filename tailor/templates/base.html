@@ -1,10 +1,15 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="en" x-data="app()">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Tailor CRM - Digital measurement book and order tracker">
+    <!-- In your base.html, store session from Flask login -->
+    <meta name="flask-session" content="{{ request.session.flask_session_id|default:'' }}">
+
+
+
     <title x-text="pageTitle ? pageTitle + ' | Tailor CRM' : 'Tailor CRM'"></title>
 
     <!-- HTMX -->
@@ -262,6 +267,13 @@
                 localStorage.removeItem('tailor_crm_' + key);
             }
         };
+        
+        
+        // GOOD — handles missing meta
+        const meta = document.querySelector('meta[name="flask-session"]');
+        evt.detail.headers['X-SESSION-ID'] = meta ? meta.content : '';
+
+
     </script>
 
     {% block extra_js %}{% endblock %}

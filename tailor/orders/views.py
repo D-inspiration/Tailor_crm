@@ -10,6 +10,8 @@ from datetime import datetime, timedelta
 from .models import Order, Payment, StyleGallery
 from .forms import OrderForm, PaymentForm, OrderStatusForm, StyleGalleryForm
 from customers.models import Customer
+from services.event_client import track_event
+from services.subscription_client import SubscriptionClient
 
 
 @login_required
@@ -66,13 +68,43 @@ def order_detail(request, pk):
 
 @login_required
 def order_create(request):
-    """Create new order."""
+    """Create new order with subscription gate."""
     if request.method == 'POST':
+        # GATE: Check order limit
+        flask_user_id = request.session.get('flask_user_id') or request.user.id
+        allowed, reason = SubscriptionClient.check_limit(flask_user_id, "orders_per_month")
+        
+        if not allowed:
+            error_msg = "🚫 Monthly order limit reached. Upgrade for unlimited orders."
+            if request.headers.get('HX-Request'):
+                return HttpResponse(
+                    f'<div class="alert alert-error">{error_msg}</div>',
+                    status=429
+                )
+            form = OrderForm(request.POST, request.FILES)
+            return render(request, 'orders/order_form.html', {
+                'form': form,
+                'error': error_msg,
+                'is_create': True,
+                'upgrade_prompt': True
+            })
+
         form = OrderForm(request.POST, request.FILES)
         if form.is_valid():
             order = form.save(commit=False)
-            order.balance = order.amount  # Initial balance = full amount
+            order.balance = order.amount
             order.save()
+
+            track_event(request, "action", {
+                "action_type": "order_created",
+                "order_id": order.id,
+                "customer_id": order.customer.id,
+                "customer_name": order.customer.name,
+                "amount": str(order.amount),
+                "delivery_date": str(order.delivery_date),
+                "status": order.status,
+                "source": "web"
+            })
 
             if request.headers.get('HX-Request'):
                 return render(request, 'orders/partials/order_row.html', {
@@ -80,7 +112,6 @@ def order_create(request):
                 })
             return redirect('order_detail', pk=order.pk)
     else:
-        # Pre-select customer if passed in URL
         initial = {}
         customer_id = request.GET.get('customer')
         if customer_id:
@@ -99,9 +130,20 @@ def order_edit(request, pk):
     order = get_object_or_404(Order, pk=pk)
 
     if request.method == 'POST':
+        old_status = order.status
         form = OrderForm(request.POST, request.FILES, instance=order)
         if form.is_valid():
             order = form.save()
+
+            if old_status != order.status:
+                track_event(request, "action", {
+                    "action_type": "order_status_changed",
+                    "order_id": order.id,
+                    "old_status": old_status,
+                    "new_status": order.status,
+                    "source": "web"
+                })
+
             return redirect('order_detail', pk=order.pk)
     else:
         form = OrderForm(instance=order)
@@ -119,6 +161,14 @@ def order_delete(request, pk):
     order = get_object_or_404(Order, pk=pk)
 
     if request.method == 'POST':
+        track_event(request, "action", {
+            "action_type": "order_deleted",
+            "order_id": order.id,
+            "customer_id": order.customer.id,
+            "amount": str(order.amount),
+            "source": "web"
+        })
+
         order.delete()
         if request.headers.get('HX-Request'):
             return HttpResponse('', headers={'HX-Redirect': '/orders/'})
@@ -135,9 +185,19 @@ def update_status(request, pk):
     order = get_object_or_404(Order, pk=pk)
 
     if request.method == 'POST':
+        old_status = order.status
         form = OrderStatusForm(request.POST, instance=order)
         if form.is_valid():
             form.save()
+
+            if old_status != order.status:
+                track_event(request, "action", {
+                    "action_type": "order_status_changed",
+                    "order_id": order.id,
+                    "old_status": old_status,
+                    "new_status": order.status,
+                    "source": "web"
+                })
 
             if request.headers.get('HX-Request'):
                 return render(request, 'orders/partials/status_badge.html', {
@@ -159,6 +219,16 @@ def add_payment(request, pk):
             payment = form.save(commit=False)
             payment.order = order
             payment.save()
+
+            track_event(request, "action", {
+                "action_type": "payment_received",
+                "order_id": order.id,
+                "payment_id": payment.id,
+                "amount": str(payment.amount),
+                "payment_method": payment.payment_method,
+                "remaining_balance": str(order.balance),
+                "source": "web"
+            })
 
             if request.headers.get('HX-Request'):
                 return render(request, 'orders/partials/payment_row.html', {
@@ -209,7 +279,16 @@ def gallery_create(request):
     if request.method == 'POST':
         form = StyleGalleryForm(request.POST, request.FILES)
         if form.is_valid():
-            form.save()
+            image = form.save()
+
+            track_event(request, "action", {
+                "action_type": "gallery_image_added",
+                "image_id": image.id,
+                "category": image.style_category,
+                "title": image.title,
+                "source": "web"
+            })
+
             return redirect('gallery_list')
     else:
         form = StyleGalleryForm()
@@ -237,3 +316,5 @@ def order_search(request):
         'orders': orders,
         'query': query
     })
+
+

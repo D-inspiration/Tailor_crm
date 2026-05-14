@@ -1145,3 +1145,43 @@ textarea.form-control {
     opacity: 0;
     transition: opacity 0.2s ease;
 }
+
+.subscription-banner {
+    background: var(--surface);
+    padding: 1rem 1.5rem;
+    border-radius: 12px;
+    margin-bottom: 2rem;
+}
+
+.subscription-banner.free-plan {
+    border: 2px solid var(--color-primary);
+}
+
+.plan-badge {
+    background: var(--color-primary);
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: var(--text-sm);
+    font-weight: 600;
+}
+
+.upgrade-nudge {
+    margin-left: 1rem;
+    font-size: var(--text-sm);
+}
+
+.upgrade-nudge a {
+    color: var(--color-primary);
+    text-decoration: underline;
+}
+
+.limit-warning {
+    color: #e74c3c;
+    font-size: var(--text-xs);
+    font-weight: 600;
+}
+
+.progress-fill.warning {
+    background: #f39c12;
+}

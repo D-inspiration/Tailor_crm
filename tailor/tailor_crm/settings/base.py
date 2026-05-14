@@ -35,6 +35,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'middleware.flask_session.FlaskSessionMiddleware',
 ]
 
 ROOT_URLCONF = 'tailor_crm.urls'
@@ -102,3 +103,13 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Login redirect
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/login/'
+
+# Flask Auth Integration
+FLASK_AUTH_URL = os.getenv('FLASK_AUTH_URL', 'http://localhost:5050')
+FLASK_PUBLIC_PATHS = [
+    '/login/', '/logout/', '/accounts/', 
+    '/static/', '/media/', '/public/', '/admin/'
+]
+FLASK_SERVICE_KEY = os.getenv('FLASK_SERVICE_KEY', 'django-flask-shared-secret')
+
+

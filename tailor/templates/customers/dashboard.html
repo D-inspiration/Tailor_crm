@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="dashboard">
+    <!-- Subscription Banner -->
+    <div class="subscription-banner {% if subscription.plan == 'free' %}free-plan{% endif %}">
+        <div class="plan-info">
+            <span class="plan-badge">{{ subscription.plan|default:"free"|title }}</span>
+            {% if subscription.plan == 'free' %}
+            <span class="upgrade-nudge">
+                🚀 You're on Free. <a href="#upgrade">Upgrade for ₦1,500/month</a>
+            </span>
+            {% endif %}
+        </div>
+        <div class="usage-bars">
+            <div class="usage-item">
+                <label>Customers</label>
+                <div class="progress-bar">
+                    <div class="progress-fill {% if usage.customers >= limits.customers|add:-3 %}warning{% endif %}" 
+                         style="width: {% widthratio usage.customers|default:0 limits.customers|default:20 100 %}%"></div>
+                </div>
+                <span class="usage-text">{{ usage.customers|default:0 }} / {{ limits.customers|default:20 }}</span>
+                {% if usage.customers >= limits.customers|add:-3 %}
+                <span class="limit-warning">⚠️ Almost full</span>
+                {% endif %}
+            </div>
+            <!-- ... other usage bars ... -->
+        </div>
+    </div>
+
+    <!-- Metrics Grid -->
+    <div class="metrics-grid">
+        <!-- ... existing ... -->
+    </div>
+</div>
+{% endblock %}

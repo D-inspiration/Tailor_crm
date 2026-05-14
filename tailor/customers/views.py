@@ -10,12 +10,18 @@ from datetime import datetime, timedelta
 from .models import Customer, Measurement, MeasurementTemplate
 from .forms import CustomerForm, MeasurementForm, QuickSearchForm
 from orders.models import Order
+from services.event_client import track_event
+from services.subscription_client import SubscriptionClient
 
 
 @login_required
 def dashboard(request):
-    """Main dashboard with key metrics."""
+    """Main dashboard with key metrics and subscription info."""
     today = timezone.now().date()
+    flask_user_id = request.session.get('flask_user_id') or request.user.id
+
+    # Get subscription usage from Flask (placeholder until endpoint exists)
+    usage_data = SubscriptionClient.get_usage(flask_user_id)
 
     context = {
         'total_customers': Customer.objects.count(),
@@ -37,6 +43,10 @@ def dashboard(request):
         'outstanding_balance': Order.objects.filter(
             balance__gt=0
         ).aggregate(total=Sum('balance'))['total'] or 0,
+        # Subscription data for dashboard widget
+        'subscription': usage_data.get('subscription', {}),
+        'limits': usage_data.get('limits', {}),
+        'usage': usage_data.get('usage', {}),
     }
     return render(request, 'customers/dashboard.html', context)
 
@@ -56,7 +66,6 @@ def customer_list(request):
     page = request.GET.get('page', 1)
     customers_page = paginator.get_page(page)
 
-    # HTMX partial rendering
     if request.headers.get('HX-Request'):
         return render(request, 'customers/partials/customer_table.html', {
             'customers': customers_page,
@@ -87,8 +96,28 @@ def customer_detail(request, pk):
 
 @login_required
 def customer_create(request):
-    """Create new customer with measurements."""
+    """Create new customer with subscription gate."""
     if request.method == 'POST':
+        # GATE: Check customer limit
+        flask_user_id = request.session.get('flask_user_id') or request.user.id
+        allowed, reason = SubscriptionClient.check_limit(flask_user_id, "customers")
+        
+        if not allowed:
+            error_msg = "🚫 Customer limit reached. Upgrade to add more customers."
+            if request.headers.get('HX-Request'):
+                return HttpResponse(
+                    f'<div class="alert alert-error">{error_msg}</div>',
+                    status=429
+                )
+            form = CustomerForm(request.POST)
+            return render(request, 'customers/customer_form.html', {
+                'form': form,
+                'error': error_msg,
+                'templates': MeasurementTemplate.objects.all(),
+                'is_create': True,
+                'upgrade_prompt': True
+            })
+
         form = CustomerForm(request.POST)
         if form.is_valid():
             customer = form.save()
@@ -105,6 +134,15 @@ def customer_create(request):
                         value=value.strip()
                     )
 
+            track_event(request, "action", {
+                "action_type": "customer_created",
+                "customer_id": customer.id,
+                "customer_name": customer.name,
+                "phone": customer.phone,
+                "measurement_count": len([n for n in measurement_names if n.strip()]),
+                "source": "web"
+            })
+
             if request.headers.get('HX-Request'):
                 return render(request, 'customers/partials/customer_row.html', {
                     'customer': customer
@@ -113,7 +151,6 @@ def customer_create(request):
     else:
         form = CustomerForm()
 
-    # Get measurement templates for gender
     templates = MeasurementTemplate.objects.all()
 
     return render(request, 'customers/customer_form.html', {
@@ -132,6 +169,14 @@ def customer_edit(request, pk):
         form = CustomerForm(request.POST, instance=customer)
         if form.is_valid():
             form.save()
+
+            track_event(request, "action", {
+                "action_type": "customer_updated",
+                "customer_id": customer.id,
+                "customer_name": customer.name,
+                "source": "web"
+            })
+
             return redirect('customer_detail', pk=customer.pk)
     else:
         form = CustomerForm(instance=customer)
@@ -149,6 +194,14 @@ def customer_delete(request, pk):
     customer = get_object_or_404(Customer, pk=pk)
 
     if request.method == 'POST':
+        track_event(request, "action", {
+            "action_type": "customer_deleted",
+            "customer_id": customer.id,
+            "customer_name": customer.name,
+            "phone": customer.phone,
+            "source": "web"
+        })
+
         customer.delete()
         if request.headers.get('HX-Request'):
             return HttpResponse('', headers={'HX-Redirect': '/customers/'})
@@ -170,6 +223,15 @@ def add_measurement(request, pk):
             measurement = form.save(commit=False)
             measurement.customer = customer
             measurement.save()
+
+            track_event(request, "action", {
+                "action_type": "measurement_added",
+                "customer_id": customer.id,
+                "customer_name": customer.name,
+                "measurement_name": measurement.measurement_name,
+                "value": measurement.value,
+                "source": "web"
+            })
 
             if request.headers.get('HX-Request'):
                 return render(request, 'customers/partials/measurement_row.html', {
@@ -228,7 +290,6 @@ def get_measurement_template(request):
         except MeasurementTemplate.DoesNotExist:
             fields = []
     else:
-        # Default fields based on gender
         if gender == 'male':
             fields = ['Chest', 'Shoulder', 'Sleeve', 'Trouser Length', 
                      'Waist', 'Neck', 'Thigh', 'Wrist']
@@ -249,3 +310,5 @@ def customer_orders_partial(request, pk):
         'orders': orders,
         'customer': customer
     })
+
+    

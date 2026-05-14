@@ -1,0 +1,263 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div x-data="{ pageTitle: '{{ customer.name }}', activeTab: 'measurements' }"></div>
+
+<!-- Customer Header Card -->
+<div class="card" style="margin-bottom: var(--space-xl);">
+    <div class="card-body">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: var(--space-lg);">
+            <div style="display: flex; gap: var(--space-lg); align-items: flex-start;">
+                <div style="width: 80px; height: 80px; border-radius: var(--radius-xl); background: var(--color-primary); display: flex; align-items: center; justify-content: center; font-size: 2rem; color: white; font-weight: 700;">
+                    {{ customer.name|first|upper }}
+                </div>
+                <div>
+                    <h1 style="font-size: var(--text-2xl); font-weight: 800; margin-bottom: var(--space-xs);">{{ customer.name }}</h1>
+                    <div style="display: flex; flex-wrap: wrap; gap: var(--space-md); color: var(--color-text-secondary); font-size: var(--text-sm);">
+                        <span>📞 {{ customer.phone }}</span>
+                        {% if customer.address %}
+                        <span>📍 {{ customer.address|truncatechars:50 }}</span>
+                        {% endif %}
+                        <span class="badge" style="background: var(--color-surface-hover);">{{ customer.get_gender_display }}</span>
+                    </div>
+                    {% if customer.notes %}
+                    <p style="margin-top: var(--space-sm); color: var(--color-text-secondary); font-style: italic;">{{ customer.notes }}</p>
+                    {% endif %}
+                </div>
+            </div>
+            <div style="display: flex; gap: var(--space-sm); flex-wrap: wrap;">
+                <a href="https://wa.me/{{ customer.phone }}" target="_blank" class="btn btn-success" style="background: #25d366;">
+                    💬 WhatsApp
+                </a>
+                <a href="{% url 'customer_edit' customer.pk %}" class="btn btn-secondary">✏️ Edit</a>
+                <a href="{% url 'order_create' %}?customer={{ customer.pk }}" class="btn btn-primary">📋 New Order</a>
+            </div>
+        </div>
+
+        <!-- Quick Stats -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-lg); margin-top: var(--space-xl); padding-top: var(--space-lg); border-top: 1px solid var(--color-border-light);">
+            <div>
+                <div style="font-size: var(--text-2xl); font-weight: 800;">{{ customer.total_orders }}</div>
+                <div style="font-size: var(--text-sm); color: var(--color-text-secondary);">Total Orders</div>
+            </div>
+            <div>
+                <div style="font-size: var(--text-2xl); font-weight: 800;">₦{{ customer.total_spent|floatformat:0 }}</div>
+                <div style="font-size: var(--text-sm); color: var(--color-text-secondary);">Total Spent</div>
+            </div>
+            <div>
+                <div style="font-size: var(--text-2xl); font-weight: 800; {% if customer.outstanding_balance > 0 %}color: var(--color-danger);{% else %}color: var(--color-success);{% endif %}">
+                    ₦{{ customer.outstanding_balance|floatformat:0 }}
+                </div>
+                <div style="font-size: var(--text-sm); color: var(--color-text-secondary);">Outstanding</div>
+            </div>
+            <div>
+                <div style="font-size: var(--text-sm); color: var(--color-text-secondary);">
+                    {% if customer.latest_measurement %}
+                    Last measured {{ customer.latest_measurement.created_at|timesince }} ago
+                    {% else %}
+                    No measurements yet
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tabs -->
+<div class="card">
+    <div style="display: flex; border-bottom: 1px solid var(--color-border-light); padding: 0 var(--space-lg);">
+        <button 
+            @click="activeTab = 'measurements'"
+            :class="activeTab === 'measurements' ? 'active' : ''"
+            style="padding: var(--space-md) var(--space-lg); border: none; background: none; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; transition: all var(--transition-fast);"
+            :style="activeTab === 'measurements' ? 'border-bottom-color: var(--color-primary); color: var(--color-primary);' : 'color: var(--color-text-secondary);'"
+        >
+            📏 Measurements ({{ measurements|length }})
+        </button>
+        <button 
+            @click="activeTab = 'orders'"
+            :class="activeTab === 'orders' ? 'active' : ''"
+            style="padding: var(--space-md) var(--space-lg); border: none; background: none; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; transition: all var(--transition-fast);"
+            :style="activeTab === 'orders' ? 'border-bottom-color: var(--color-primary); color: var(--color-primary);' : 'color: var(--color-text-secondary);'"
+        >
+            📋 Orders ({{ orders|length }})
+        </button>
+        <button 
+            @click="activeTab = 'history'"
+            :class="activeTab === 'history' ? 'active' : ''"
+            style="padding: var(--space-md) var(--space-lg); border: none; background: none; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; transition: all var(--transition-fast);"
+            :style="activeTab === 'history' ? 'border-bottom-color: var(--color-primary); color: var(--color-primary);' : 'color: var(--color-text-secondary);'"
+        >
+            📜 History
+        </button>
+    </div>
+
+    <!-- Measurements Tab -->
+    <div x-show="activeTab === 'measurements'" x-cloak style="padding: var(--space-lg);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
+            <h3 style="font-size: var(--text-lg); font-weight: 700;">Body Measurements</h3>
+            <button 
+                class="btn btn-primary btn-sm"
+                @click="showMeasurementForm = !showMeasurementForm"
+                x-data="{ showMeasurementForm: false }"
+            >
+                ➕ Add Measurement
+            </button>
+        </div>
+
+        {% if measurements %}
+        <div class="measurement-grid">
+            {% for m in measurements %}
+            <div class="measurement-item" style="position: relative;">
+                <form method="post" action="{% url 'delete_measurement' m.pk %}" style="position: absolute; top: var(--space-xs); right: var(--space-xs);"
+                      hx-post="{% url 'delete_measurement' m.pk %}"
+                      hx-confirm="Delete this measurement?"
+                      hx-swap="outerHTML"
+                      hx-target="closest .measurement-item">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-icon" style="width: 28px; height: 28px; font-size: var(--text-xs);">🗑️</button>
+                </form>
+                <div class="measurement-name">{{ m.measurement_name }}</div>
+                <div class="measurement-value">{{ m.value }}</div>
+                {% if m.notes %}
+                <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">{{ m.notes }}</div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state" style="padding: var(--space-xl);">
+            <div class="empty-icon">📏</div>
+            <p class="empty-text">No measurements recorded yet.</p>
+        </div>
+        {% endif %}
+
+        <!-- Add Measurement Inline Form -->
+        <div x-data="{ showMeasurementForm: false }">
+            <div x-show="showMeasurementForm" x-cloak style="margin-top: var(--space-lg); padding: var(--space-lg); background: var(--color-surface-hover); border-radius: var(--radius-lg);">
+                <h4 style="margin-bottom: var(--space-md); font-weight: 600;">Add New Measurement</h4>
+                <form method="post" action="{% url 'add_measurement' customer.pk %}"
+                      hx-post="{% url 'add_measurement' customer.pk %}"
+                      hx-target=".measurement-grid"
+                      hx-swap="beforeend"
+                      @htmx:after-request="showMeasurementForm = false">
+                    {% csrf_token %}
+                    <div class="form-row">
+                        <div class="form-group" style="margin-bottom: var(--space-md);">
+                            <label class="form-label">Measurement Name</label>
+                            <input type="text" name="measurement_name" class="form-control" placeholder="e.g. Chest, Waist" required>
+                        </div>
+                        <div class="form-group" style="margin-bottom: var(--space-md);">
+                            <label class="form-label">Value</label>
+                            <input type="text" name="value" class="form-control" placeholder="e.g. 42 inches" required>
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-bottom: var(--space-md);">
+                        <label class="form-label">Notes (Optional)</label>
+                        <input type="text" name="notes" class="form-control" placeholder="Any additional notes">
+                    </div>
+                    <div style="display: flex; gap: var(--space-sm);">
+                        <button type="submit" class="btn btn-primary">Save Measurement</button>
+                        <button type="button" class="btn btn-secondary" @click="showMeasurementForm = false">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Orders Tab -->
+    <div x-show="activeTab === 'orders'" x-cloak style="padding: var(--space-lg);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-lg);">
+            <h3 style="font-size: var(--text-lg); font-weight: 700;">Order History</h3>
+            <a href="{% url 'order_create' %}?customer={{ customer.pk }}" class="btn btn-primary btn-sm">➕ New Order</a>
+        </div>
+
+        {% if orders %}
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Order #</th>
+                        <th>Style</th>
+                        <th>Delivery</th>
+                        <th>Amount</th>
+                        <th>Balance</th>
+                        <th>Status</th>
+                        <th style="text-align: right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in orders %}
+                    <tr>
+                        <td><a href="{% url 'order_detail' order.pk %}" style="font-weight: 600;">#{{ order.id }}</a></td>
+                        <td>{{ order.style_note|truncatechars:30 }}</td>
+                        <td>{{ order.delivery_date|date:"M d, Y" }}</td>
+                        <td>₦{{ order.amount|floatformat:0 }}</td>
+                        <td>
+                            {% if order.balance > 0 %}
+                            <span style="color: var(--color-danger); font-weight: 600;">₦{{ order.balance|floatformat:0 }}</span>
+                            {% else %}
+                            <span style="color: var(--color-success);">Paid</span>
+                            {% endif %}
+                        </td>
+                        <td><span class="badge badge-{{ order.status }}">{{ order.get_status_display }}</span></td>
+                        <td style="text-align: right;">
+                            <a href="{% url 'order_detail' order.pk %}" class="btn-icon" title="View">👁️</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state" style="padding: var(--space-xl);">
+            <div class="empty-icon">📋</div>
+            <p class="empty-text">No orders yet. <a href="{% url 'order_create' %}?customer={{ customer.pk }}">Create first order</a>.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- History Tab -->
+    <div x-show="activeTab === 'history'" x-cloak style="padding: var(--space-lg);">
+        <h3 style="font-size: var(--text-lg); font-weight: 700; margin-bottom: var(--space-lg);">Activity Timeline</h3>
+
+        {% if orders %}
+        <div style="position: relative; padding-left: var(--space-xl);">
+            <div style="position: absolute; left: 8px; top: 0; bottom: 0; width: 2px; background: var(--color-border);"></div>
+
+            {% for order in orders %}
+            <div style="position: relative; margin-bottom: var(--space-lg); padding-bottom: var(--space-lg); border-bottom: 1px solid var(--color-border-light);">
+                <div style="position: absolute; left: -26px; top: 4px; width: 16px; height: 16px; border-radius: 50%; background: var(--color-primary); border: 3px solid var(--color-surface);"></div>
+                <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-xs);">{{ order.created_at|date:"F d, Y \a\t h:i A" }}</div>
+                <div style="font-weight: 600;">Order #{{ order.id }} created</div>
+                <div style="color: var(--color-text-secondary); font-size: var(--text-sm);">{{ order.style_note|truncatechars:60 }}</div>
+                <div style="margin-top: var(--space-sm);">
+                    <span class="badge badge-{{ order.status }}">{{ order.get_status_display }}</span>
+                    <span style="margin-left: var(--space-sm); font-weight: 600;">₦{{ order.amount|floatformat:0 }}</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state" style="padding: var(--space-xl);">
+            <div class="empty-icon">📜</div>
+            <p class="empty-text">No activity history yet.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Delete Customer -->
+<div style="margin-top: var(--space-xl); text-align: center;">
+    <form method="post" action="{% url 'customer_delete' customer.pk %}" 
+          style="display: inline;"
+          hx-post="{% url 'customer_delete' customer.pk %}"
+          hx-confirm="Are you sure you want to delete {{ customer.name }}? This will also delete all their orders and measurements."
+          hx-redirect="/customers/">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger" style="background: transparent; color: var(--color-danger); border: 1px solid var(--color-danger);">
+            🗑️ Delete Customer
+        </button>
+    </form>
+</div>
+{% endblock %}

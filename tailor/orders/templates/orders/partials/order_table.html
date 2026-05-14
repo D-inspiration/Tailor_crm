@@ -1,0 +1,102 @@
+{% if orders %}
+<div class="card">
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Order #</th>
+                    <th>Customer</th>
+                    <th>Style</th>
+                    <th>Delivery</th>
+                    <th>Amount</th>
+                    <th>Balance</th>
+                    <th>Status</th>
+                    <th style="text-align: right;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for order in orders %}
+                <tr>
+                    <td>
+                        <a href="{% url 'order_detail' order.pk %}" style="font-weight: 600;">#{{ order.id }}</a>
+                    </td>
+                    <td>
+                        <a href="{% url 'customer_detail' order.customer.pk %}">{{ order.customer.name }}</a>
+                        <div style="font-size: var(--text-xs); color: var(--color-text-muted);">{{ order.customer.phone }}</div>
+                    </td>
+                    <td>{{ order.style_note|truncatechars:30 }}</td>
+                    <td>
+                        <span {% if order.days_until_delivery <= 0 and order.status != 'delivered' %}style="color: var(--color-danger); font-weight: 600;"{% endif %}>
+                            {{ order.delivery_date|date:"M d" }}
+                        </span>
+                        {% if order.days_until_delivery == 0 and order.status != 'delivered' %}
+                        <span class="badge badge-danger" style="margin-left: var(--space-xs);">Today</span>
+                        {% endif %}
+                    </td>
+                    <td>₦{{ order.amount|floatformat:0 }}</td>
+                    <td>
+                        {% if order.balance > 0 %}
+                        <span style="color: var(--color-danger); font-weight: 600;">₦{{ order.balance|floatformat:0 }}</span>
+                        {% else %}
+                        <span style="color: var(--color-success);">Paid</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <form method="post" action="{% url 'update_status' order.pk %}"
+                              hx-post="{% url 'update_status' order.pk %}"
+                              hx-target="closest td"
+                              hx-swap="innerHTML"
+                              style="display: inline;">
+                            {% csrf_token %}
+                            <select name="status" class="badge badge-{{ order.status }}" style="cursor: pointer; border: none; appearance: none; padding-right: var(--space-lg);" onchange="this.form.submit()">
+                                {% for value, label in status_choices %}
+                                <option value="{{ value }}" {% if order.status == value %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </form>
+                    </td>
+                    <td style="text-align: right;">
+                        <div style="display: flex; gap: var(--space-xs); justify-content: flex-end;">
+                            <a href="{% url 'order_detail' order.pk %}" class="btn-icon" title="View">👁️</a>
+                            <a href="{% url 'order_edit' order.pk %}" class="btn-icon" title="Edit">✏️</a>
+                            <a href="https://wa.me/{{ order.customer.phone }}?text=Hello%20{{ order.customer.name }},%20your%20order%20%23{{ order.id }}%20is%20{{ order.get_status_display|lower }}." target="_blank" class="btn-icon" title="WhatsApp" style="background: #d1fae5; border-color: var(--color-success);">💬</a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if orders.has_other_pages %}
+    <div class="card-footer">
+        <div class="pagination">
+            {% if orders.has_previous %}
+            <a href="?page={{ orders.previous_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if query %}&q={{ query }}{% endif %}" class="page-link">← Prev</a>
+            {% endif %}
+
+            {% for num in orders.paginator.page_range %}
+                {% if orders.number == num %}
+                <span class="page-link active">{{ num }}</span>
+                {% elif num > orders.number|add:'-3' and num < orders.number|add:'3' %}
+                <a href="?page={{ num }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if query %}&q={{ query }}{% endif %}" class="page-link">{{ num }}</a>
+                {% endif %}
+            {% endfor %}
+
+            {% if orders.has_next %}
+            <a href="?page={{ orders.next_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if query %}&q={{ query }}{% endif %}" class="page-link">Next →</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% else %}
+<div class="empty-state card" style="padding: var(--space-2xl);">
+    <div class="empty-icon">📋</div>
+    <h3 class="empty-title">No orders found</h3>
+    <p class="empty-text">{% if query or status_filter %}Try adjusting your filters{% else %}Create your first order{% endif %}</p>
+    {% if not query and not status_filter %}
+    <a href="{% url 'order_create' %}" class="btn btn-primary">Create Order</a>
+    {% endif %}
+</div>
+{% endif %}

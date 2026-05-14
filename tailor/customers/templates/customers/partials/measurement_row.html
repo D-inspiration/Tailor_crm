@@ -1,0 +1,15 @@
+<div class="measurement-item" style="position: relative;" hx-swap-oob="true">
+    <form method="post" action="{% url 'delete_measurement' measurement.pk %}" style="position: absolute; top: var(--space-xs); right: var(--space-xs);"
+          hx-post="{% url 'delete_measurement' measurement.pk %}"
+          hx-confirm="Delete this measurement?"
+          hx-swap="outerHTML"
+          hx-target="closest .measurement-item">
+        {% csrf_token %}
+        <button type="submit" class="btn-icon" style="width: 28px; height: 28px; font-size: var(--text-xs);">🗑️</button>
+    </form>
+    <div class="measurement-name">{{ measurement.measurement_name }}</div>
+    <div class="measurement-value">{{ measurement.value }}</div>
+    {% if measurement.notes %}
+    <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-top: var(--space-xs);">{{ measurement.notes }}</div>
+    {% endif %}
+</div>

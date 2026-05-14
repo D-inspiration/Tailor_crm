@@ -1,0 +1,9 @@
+{% if orders %}
+{% for order in orders %}
+<a href="{% url 'order_detail' order.pk %}" class="search-result-item">
+    <div class="result-type">Order #{{ order.id }}</div>
+    <div class="result-title">{{ order.customer.name }}</div>
+    <div class="result-subtitle">{{ order.style_note|truncatechars:40 }} • ₦{{ order.amount|floatformat:0 }}</div>
+</a>
+{% endfor %}
+{% endif %}

@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div x-data="{ pageTitle: 'Customers' }"></div>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">👥 Customers</h1>
+        <p style="color: var(--color-text-secondary); margin-top: var(--space-xs);">{{ total_count }} total customers</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'customer_create' %}" class="btn btn-primary">
+            <span>➕</span> Add Customer
+        </a>
+    </div>
+</div>
+
+<!-- Search & Filters -->
+<div class="card" style="margin-bottom: var(--space-lg);">
+    <div class="card-body">
+        <div class="search-wrapper" style="max-width: 100%;">
+            <span class="search-icon">🔍</span>
+            <input 
+                type="text" 
+                class="search-input"
+                placeholder="Search customers by name or phone..."
+                value="{{ query }}"
+                hx-get="{% url 'customer_list' %}"
+                hx-trigger="keyup changed delay:300ms"
+                hx-target="#customer-table"
+                hx-push-url="true"
+                name="q"
+            >
+        </div>
+    </div>
+</div>
+
+<!-- Customer Table -->
+<div id="customer-table">
+    {% include 'customers/partials/customer_table.html' %}
+</div>
+
+{% endblock %}

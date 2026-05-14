@@ -1,0 +1,9 @@
+{% if customers %}
+{% for customer in customers %}
+<a href="{% url 'customer_detail' customer.pk %}" class="search-result-item">
+    <div class="result-type">Customer</div>
+    <div class="result-title">{{ customer.name }}</div>
+    <div class="result-subtitle">{{ customer.phone }} • {{ customer.total_orders }} orders</div>
+</a>
+{% endfor %}
+{% endif %}

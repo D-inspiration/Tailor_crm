@@ -1,0 +1,161 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div x-data="{ pageTitle: '{% if is_create %}Add Customer{% else %}Edit Customer{% endif %}' }"></div>
+
+<div style="max-width: 800px; margin: 0 auto;">
+    <div class="page-header">
+        <h1 class="page-title">
+            {% if is_create %}➕ Add New Customer{% else %}✏️ Edit {{ customer.name }}{% endif %}
+        </h1>
+        <a href="{% if customer %}{% url 'customer_detail' customer.pk %}{% else %}{% url 'customer_list' %}{% endif %}" class="btn btn-secondary">← Back</a>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <form method="post" x-data="measurementForm()" @submit.prevent="submitForm($event)">
+                {% csrf_token %}
+
+                <h3 style="font-size: var(--text-lg); font-weight: 700; margin-bottom: var(--space-lg); padding-bottom: var(--space-md); border-bottom: 1px solid var(--color-border-light);">👤 Customer Information</h3>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Full Name *</label>
+                        {{ form.name }}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Phone Number *</label>
+                        {{ form.phone }}
+                        <div class="form-hint">e.g. 08012345678 or +2348012345678</div>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Gender</label>
+                        {{ form.gender }}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Address</label>
+                        {{ form.address }}
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Notes</label>
+                    {{ form.notes }}
+                </div>
+
+                {% if is_create %}
+                <h3 style="font-size: var(--text-lg); font-weight: 700; margin: var(--space-xl) 0 var(--space-lg); padding-bottom: var(--space-md); border-bottom: 1px solid var(--color-border-light);">
+                    📏 Measurements
+                    <span style="font-size: var(--text-sm); font-weight: 400; color: var(--color-text-muted); margin-left: var(--space-sm);">(Optional - can add later)</span>
+                </h3>
+
+                <!-- Template Selector -->
+                <div class="form-group">
+                    <label class="form-label">Load from Template</label>
+                    <select class="form-control" x-model="selectedTemplate" @change="loadTemplate()">
+                        <option value="">-- Select a template --</option>
+                        {% for template in templates %}
+                        <option value="{{ template.name }}" data-gender="{{ template.gender }}">{{ template.name }} ({{ template.get_gender_display }})</option>
+                        {% endfor %}
+                        <option value="custom">Custom / Manual Entry</option>
+                    </select>
+                </div>
+
+                <!-- Dynamic Measurement Fields -->
+                <div style="margin-top: var(--space-lg);">
+                    <template x-for="(field, index) in measurementFields" :key="index">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: var(--space-md); align-items: end; margin-bottom: var(--space-md);">
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label class="form-label" x-text="field.name"></label>
+                                <input type="text" 
+                                       :name="'measurement_name[]'" 
+                                       :value="field.name"
+                                       class="form-control" 
+                                       readonly
+                                       style="background: var(--color-surface-hover);">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label class="form-label">Value</label>
+                                <input type="text" 
+                                       name="measurement_value[]" 
+                                       x-model="field.value"
+                                       class="form-control" 
+                                       placeholder="e.g. 42 inches">
+                            </div>
+                            <button type="button" 
+                                    @click="removeField(index)" 
+                                    class="btn-icon"
+                                    style="margin-bottom: var(--space-xs);">🗑️</button>
+                        </div>
+                    </template>
+
+                    <button type="button" 
+                            @click="addCustomField()" 
+                            class="btn btn-secondary btn-sm"
+                            style="margin-top: var(--space-sm);">
+                        ➕ Add Custom Field
+                    </button>
+                </div>
+                {% endif %}
+
+                <div style="margin-top: var(--space-xl); padding-top: var(--space-lg); border-top: 1px solid var(--color-border-light); display: flex; gap: var(--space-md); justify-content: flex-end;">
+                    <a href="{% if customer %}{% url 'customer_detail' customer.pk %}{% else %}{% url 'customer_list' %}{% endif %}" class="btn btn-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-primary">
+                        {% if is_create %}💾 Create Customer{% else %}💾 Save Changes{% endif %}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function measurementForm() {
+    return {
+        selectedTemplate: '',
+        measurementFields: [],
+
+        loadTemplate() {
+            if (!this.selectedTemplate || this.selectedTemplate === 'custom') {
+                this.measurementFields = [];
+                return;
+            }
+
+            // Get gender from selected option
+            const select = document.querySelector('select[x-model="selectedTemplate"]');
+            const option = select.options[select.selectedIndex];
+            const gender = option.dataset.gender || 'male';
+
+            // Default fields based on gender
+            const defaultFields = gender === 'female' 
+                ? ['Bust', 'Waist', 'Hip', 'Shoulder', 'Sleeve', 'Gown Length', 'Underbust']
+                : ['Chest', 'Shoulder', 'Sleeve', 'Trouser Length', 'Waist', 'Neck', 'Thigh', 'Wrist'];
+
+            this.measurementFields = defaultFields.map(name => ({
+                name: name,
+                value: ''
+            }));
+        },
+
+        addCustomField() {
+            this.measurementFields.push({
+                name: '',
+                value: ''
+            });
+        },
+
+        removeField(index) {
+            this.measurementFields.splice(index, 1);
+        },
+
+        submitForm(event) {
+            // Let the form submit normally - HTMX will handle if needed
+            event.target.submit();
+        }
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,269 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" x-data="app()">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Tailor CRM - Digital measurement book and order tracker">
+    <title x-text="pageTitle ? pageTitle + ' | Tailor CRM' : 'Tailor CRM'"></title>
+
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.12" integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2" crossorigin="anonymous"></script>
+
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.3/dist/cdn.min.js"></script>
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+
+    <!-- PWA / Offline support -->
+    <link rel="manifest" href="{% static 'manifest.json' %}">
+    <meta name="theme-color" content="#1a5f3f">
+
+    <style>[x-cloak] { display: none !important; }</style>
+</head>
+<body x-data="{ sidebarOpen: false, mobileMenuOpen: false }" 
+      @keydown.escape.window="sidebarOpen = false; mobileMenuOpen = false">
+
+    <!-- Mobile Header -->
+    <header class="mobile-header">
+        <button class="menu-toggle" @click="mobileMenuOpen = !mobileMenuOpen" aria-label="Toggle menu">
+            <span></span>
+            <span></span>
+            <span></span>
+        </button>
+        <a href="{% url 'dashboard' %}" class="logo">
+            <span class="logo-icon">✂️</span>
+            <span class="logo-text">Tailor CRM</span>
+        </a>
+        <div class="header-actions">
+            {% if user.is_authenticated %}
+            <span class="user-name">{{ user.username }}</span>
+            <a href="{% url 'logout' %}" class="btn-icon" title="Logout">🚪</a>
+            {% endif %}
+        </div>
+    </header>
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar" :class="{ 'open': sidebarOpen || mobileMenuOpen }" x-cloak>
+        <div class="sidebar-header">
+            <a href="{% url 'dashboard' %}" class="logo">
+                <span class="logo-icon">✂️</span>
+                <span class="logo-text">Tailor CRM</span>
+            </a>
+        </div>
+
+        <nav class="sidebar-nav">
+            <a href="{% url 'dashboard' %}" class="nav-link {% if request.path == '/' %}active{% endif %}">
+                <span class="nav-icon">📊</span>
+                <span>Dashboard</span>
+            </a>
+            <a href="{% url 'customer_list' %}" class="nav-link {% if '/customers' in request.path %}active{% endif %}">
+                <span class="nav-icon">👥</span>
+                <span>Customers</span>
+            </a>
+            <a href="{% url 'order_list' %}" class="nav-link {% if '/orders' in request.path and '/gallery' not in request.path %}active{% endif %}">
+                <span class="nav-icon">📋</span>
+                <span>Orders</span>
+            </a>
+            <a href="{% url 'gallery_list' %}" class="nav-link {% if '/gallery' in request.path %}active{% endif %}">
+                <span class="nav-icon">🖼️</span>
+                <span>Style Gallery</span>
+            </a>
+        </nav>
+
+        <div class="sidebar-footer">
+            {% if user.is_authenticated %}
+            <div class="user-info">
+                <span class="user-avatar">👤</span>
+                <div>
+                    <div class="user-name">{{ user.username }}</div>
+                    <a href="{% url 'logout' %}" class="logout-link">Logout</a>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </aside>
+
+    <!-- Overlay for mobile -->
+    <div class="sidebar-overlay" 
+         x-show="mobileMenuOpen" 
+         @click="mobileMenuOpen = false"
+         x-transition.opacity
+         x-cloak></div>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Quick Search Bar (Global) -->
+        <div class="quick-search-bar" x-data="quickSearch()">
+            <div class="search-wrapper">
+                <span class="search-icon">🔍</span>
+                <input 
+                    type="text" 
+                    class="search-input"
+                    placeholder="Quick search customers or orders..."
+                    x-model="searchQuery"
+                    @input.debounce.300ms="performSearch()"
+                    @focus="searchFocused = true"
+                    @click.away="searchFocused = false"
+                    autocomplete="off"
+                >
+                <button class="search-clear" x-show="searchQuery" @click="searchQuery = ''; results = []" x-cloak>✕</button>
+            </div>
+
+            <!-- Search Results Dropdown -->
+            <div class="search-results" x-show="searchFocused && (results.length > 0 || searchQuery.length >= 2)" x-cloak>
+                <div x-show="loading" class="search-loading">Searching...</div>
+                <div x-show="!loading && results.length === 0 && searchQuery.length >= 2" class="search-empty">
+                    No results found
+                </div>
+                <template x-for="result in results" :key="result.id">
+                    <a :href="result.url" class="search-result-item" @click="searchQuery = ''; results = []">
+                        <div class="result-type" x-text="result.type"></div>
+                        <div class="result-title" x-text="result.name"></div>
+                        <div class="result-subtitle" x-text="result.detail"></div>
+                    </a>
+                </template>
+            </div>
+        </div>
+
+        <!-- Messages -->
+        {% if messages %}
+        <div class="messages">
+            {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}">
+                {{ message }}
+                <button class="alert-close" onclick="this.parentElement.remove()">✕</button>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Page Content -->
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" x-data="toasts()" @toast.window="add($event.detail)">
+        <template x-for="toast in items" :key="toast.id">
+            <div class="toast" :class="toast.type" x-show="toast.visible" x-transition>
+                <span x-text="toast.message"></span>
+                <button @click="remove(toast.id)">✕</button>
+            </div>
+        </template>
+    </div>
+
+    <!-- Offline Indicator -->
+    <div class="offline-banner" x-data="{ offline: false }" 
+         x-init="offline = !navigator.onLine; window.addEventListener('online', () => offline = false); window.addEventListener('offline', () => offline = true)"
+         x-show="offline" x-cloak>
+        ⚠️ You are offline. Changes will sync when connection is restored.
+    </div>
+
+    <script>
+        // Alpine.js App Data
+        function app() {
+            return {
+                pageTitle: '',
+                setTitle(title) {
+                    this.pageTitle = title;
+                }
+            }
+        }
+
+        // Quick Search Component
+        function quickSearch() {
+            return {
+                searchQuery: '',
+                results: [],
+                loading: false,
+                searchFocused: false,
+
+                async performSearch() {
+                    if (this.searchQuery.length < 2) {
+                        this.results = [];
+                        return;
+                    }
+
+                    this.loading = true;
+                    try {
+                        // Search customers
+                        const customerResp = await fetch(`/customers/search/?q=${encodeURIComponent(this.searchQuery)}`, {
+                            headers: { 'HX-Request': 'true' }
+                        });
+                        const customerHtml = await customerResp.text();
+
+                        // Search orders
+                        const orderResp = await fetch(`/orders/search/?q=${encodeURIComponent(this.searchQuery)}`, {
+                            headers: { 'HX-Request': 'true' }
+                        });
+                        const orderHtml = await orderResp.text();
+
+                        // Parse and combine results
+                        this.results = this.parseResults(customerHtml, orderHtml);
+                    } catch (e) {
+                        console.error('Search error:', e);
+                    }
+                    this.loading = false;
+                },
+
+                parseResults(customerHtml, orderHtml) {
+                    const results = [];
+                    // Simple parsing - in production, return JSON from API
+                    return results;
+                }
+            }
+        }
+
+        // Toast Notifications
+        function toasts() {
+            return {
+                items: [],
+                add(detail) {
+                    const id = Date.now();
+                    this.items.push({
+                        id,
+                        message: detail.message || detail,
+                        type: detail.type || 'info',
+                        visible: true
+                    });
+                    setTimeout(() => this.remove(id), 4000);
+                },
+                remove(id) {
+                    const index = this.items.findIndex(t => t.id === id);
+                    if (index > -1) {
+                        this.items[index].visible = false;
+                        setTimeout(() => this.items.splice(index, 1), 300);
+                    }
+                }
+            }
+        }
+
+        // HTMX Events
+        document.body.addEventListener('htmx:afterSwap', function(evt) {
+            // Re-initialize any Alpine components in swapped content
+            if (window.Alpine) {
+                evt.detail.target.querySelectorAll('[x-data]').forEach(el => {
+                    Alpine.initTree(el);
+                });
+            }
+        });
+
+        // Offline storage helper
+        const OfflineStore = {
+            save(key, data) {
+                localStorage.setItem('tailor_crm_' + key, JSON.stringify(data));
+            },
+            get(key) {
+                const data = localStorage.getItem('tailor_crm_' + key);
+                return data ? JSON.parse(data) : null;
+            },
+            remove(key) {
+                localStorage.removeItem('tailor_crm_' + key);
+            }
+        };
+    </script>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

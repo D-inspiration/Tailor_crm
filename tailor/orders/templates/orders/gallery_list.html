@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div x-data="{ pageTitle: 'Style Gallery' }"></div>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">🖼️ Style Gallery</h1>
+        <p style="color: var(--color-text-secondary); margin-top: var(--space-xs);">Portfolio of your finished work</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'gallery_create' %}" class="btn btn-primary">➕ Add Photo</a>
+    </div>
+</div>
+
+<!-- Category Filters -->
+<div style="display: flex; gap: var(--space-xs); flex-wrap: wrap; margin-bottom: var(--space-lg);">
+    <a href="{% url 'gallery_list' %}" class="filter-pill {% if not category %}active{% endif %}">All</a>
+    {% for value, label in categories %}
+    <a href="?category={{ value }}" class="filter-pill {% if category == value %}active{% endif %}">{{ label }}</a>
+    {% endfor %}
+</div>
+
+{% if images %}
+<div class="gallery-grid">
+    {% for image in images %}
+    <div class="gallery-item">
+        <img src="{{ image.image.url }}" alt="{{ image.title }}" class="gallery-image">
+        <div class="gallery-info">
+            <div class="gallery-category">{{ image.get_style_category_display }}</div>
+            <div class="gallery-title">{{ image.title|default:"Untitled" }}</div>
+            {% if image.description %}
+            <p style="font-size: var(--text-sm); color: var(--color-text-secondary); margin-top: var(--space-xs);">{{ image.description|truncatechars:60 }}</p>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state card" style="padding: var(--space-2xl);">
+    <div class="empty-icon">🖼️</div>
+    <h3 class="empty-title">No photos yet</h3>
+    <p class="empty-text">Add photos of your finished work to build your portfolio</p>
+    <a href="{% url 'gallery_create' %}" class="btn btn-primary">Add First Photo</a>
+</div>
+{% endif %}
+{% endblock %}

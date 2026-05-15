@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div x-data="{ pageTitle: '{% if is_create %}New Order{% else %}Edit Order{% endif %}' }"></div>
+
+<div style="max-width: 800px; margin: 0 auto;">
+    <div class="page-header">
+        <h1 class="page-title">
+            {% if is_create %}➕ Create New Order{% else %}✏️ Edit Order #{{ order.id }}{% endif %}
+        </h1>
+        <a href="{% if order %}{% url 'order_detail' order.pk %}{% else %}{% url 'order_list' %}{% endif %}" class="btn btn-secondary">← Back</a>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+
+                <h3 style="font-size: var(--text-lg); font-weight: 700; margin-bottom: var(--space-lg); padding-bottom: var(--space-md); border-bottom: 1px solid var(--color-border-light);">👤 Customer</h3>
+
+                <div class="form-group">
+                    <label class="form-label">Select Customer *</label>
+                    {{ form.customer }}
+                    <div class="form-hint">Don't see the customer? <a href="{% url 'customer_create' %}">Add them first</a></div>
+                </div>
+
+                <h3 style="font-size: var(--text-lg); font-weight: 700; margin: var(--space-xl) 0 var(--space-lg); padding-bottom: var(--space-md); border-bottom: 1px solid var(--color-border-light);">📋 Order Details</h3>
+
+                <div class="form-group">
+                    <label class="form-label">Style Description *</label>
+                    {{ form.style_note }}
+                    <div class="form-hint">Describe the style, design, and any special instructions</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Style Reference Image</label>
+                    {{ form.style_image }}
+                    <div class="form-hint">Upload a photo of the desired style (optional)</div>
+                    {% if order and order.style_image %}
+                    <div style="margin-top: var(--space-sm);">
+                        <img src="{{ order.style_image.url }}" alt="Current style" style="max-width: 200px; border-radius: var(--radius-md);">
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Fabric Details</label>
+                    {{ form.fabric_details }}
+                    <div class="form-hint">Fabric type, color, quantity, supplier info</div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Delivery Date *</label>
+                        {{ form.delivery_date }}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Total Amount (₦) *</label>
+                        {{ form.amount }}
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Status</label>
+                    {{ form.status }}
+                </div>
+
+                <div style="margin-top: var(--space-xl); padding-top: var(--space-lg); border-top: 1px solid var(--color-border-light); display: flex; gap: var(--space-md); justify-content: flex-end;">
+                    <a href="{% if order %}{% url 'order_detail' order.pk %}{% else %}{% url 'order_list' %}{% endif %}" class="btn btn-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-primary">
+                        {% if is_create %}💾 Create Order{% else %}💾 Save Changes{% endif %}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

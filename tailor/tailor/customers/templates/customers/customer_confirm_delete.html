@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div style="max-width: 500px; margin: var(--space-2xl) auto;">
+    <div class="card" style="text-align: center; padding: var(--space-2xl);">
+        <div style="font-size: 4rem; margin-bottom: var(--space-lg);">⚠️</div>
+        <h2 style="font-size: var(--text-xl); font-weight: 700; margin-bottom: var(--space-md);">Delete Customer?</h2>
+        <p style="color: var(--color-text-secondary); margin-bottom: var(--space-lg);">
+            Are you sure you want to delete <strong>{{ customer.name }}</strong>?<br>
+            This will also delete all their orders and measurements.<br>
+            <span style="color: var(--color-danger); font-weight: 600;">This action cannot be undone.</span>
+        </p>
+
+        <form method="post" style="display: flex; gap: var(--space-md); justify-content: center;">
+            {% csrf_token %}
+            <a href="{% url 'customer_detail' customer.pk %}" class="btn btn-secondary">Cancel</a>
+            <button type="submit" class="btn btn-danger">🗑️ Yes, Delete</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

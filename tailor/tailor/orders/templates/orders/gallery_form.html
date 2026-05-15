@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div x-data="{ pageTitle: 'Add to Gallery' }"></div>
+
+<div style="max-width: 600px; margin: 0 auto;">
+    <div class="page-header">
+        <h1 class="page-title">➕ Add to Gallery</h1>
+        <a href="{% url 'gallery_list' %}" class="btn btn-secondary">← Back</a>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+
+                <div class="form-group">
+                    <label class="form-label">Photo *</label>
+                    {{ form.image }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Title</label>
+                    {{ form.title }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Category</label>
+                    {{ form.style_category }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    {{ form.description }}
+                </div>
+
+                <div class="form-group" style="display: flex; align-items: center; gap: var(--space-sm);">
+                    {{ form.is_featured }}
+                    <label class="form-label" style="margin-bottom: 0;">Featured on homepage</label>
+                </div>
+
+                <div style="margin-top: var(--space-xl); display: flex; gap: var(--space-md); justify-content: flex-end;">
+                    <a href="{% url 'gallery_list' %}" class="btn btn-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-primary">💾 Save Photo</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,165 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div x-data="{ pageTitle: 'Dashboard' }"></div>
+
+<!-- Stats Cards -->
+<div class="stats-grid">
+    <div class="stat-card primary">
+        <div class="stat-icon">👥</div>
+        <div class="stat-value">{{ total_customers }}</div>
+        <div class="stat-label">Total Customers</div>
+    </div>
+    <div class="stat-card success">
+        <div class="stat-icon">📋</div>
+        <div class="stat-value">{{ total_orders }}</div>
+        <div class="stat-label">Total Orders</div>
+    </div>
+    <div class="stat-card warning">
+        <div class="stat-icon">⏳</div>
+        <div class="stat-value">{{ pending_orders }}</div>
+        <div class="stat-label">Pending Orders</div>
+    </div>
+    <div class="stat-card danger">
+        <div class="stat-icon">📅</div>
+        <div class="stat-value">{{ orders_due_today }}</div>
+        <div class="stat-label">Due Today</div>
+    </div>
+</div>
+
+<div class="stats-grid" style="margin-bottom: var(--space-xl);">
+    <div class="stat-card" style="border-top-color: var(--color-secondary);">
+        <div class="stat-icon">💰</div>
+        <div class="stat-value">₦{{ outstanding_balance|floatformat:0 }}</div>
+        <div class="stat-label">Outstanding Balance</div>
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: var(--space-xl);">
+    <!-- Pending Orders -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">⏳ Pending & In Progress</h2>
+            <a href="{% url 'order_list' %}?status=pending" class="btn btn-sm btn-secondary">View All</a>
+        </div>
+        <div class="card-body" style="padding: 0;">
+            {% if pending_orders_list %}
+            <div class="table-container" style="border: none;">
+                <table class="data-table">
+                    <tbody>
+                        {% for order in pending_orders_list %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'order_detail' order.pk %}" style="font-weight: 600;">#{{ order.id }}</a>
+                                <div style="font-size: var(--text-xs); color: var(--color-text-muted);">{{ order.style_note|truncatechars:30 }}</div>
+                            </td>
+                            <td>
+                                <a href="{% url 'customer_detail' order.customer.pk %}">{{ order.customer.name }}</a>
+                            </td>
+                            <td>
+                                <span class="badge badge-{{ order.status }}">{{ order.get_status_display }}</span>
+                            </td>
+                            <td style="text-align: right;">
+                                <div style="font-weight: 600;">₦{{ order.amount|floatformat:0 }}</div>
+                                {% if order.balance > 0 %}
+                                <div style="font-size: var(--text-xs); color: var(--color-danger);">Bal: ₦{{ order.balance|floatformat:0 }}</div>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state" style="padding: var(--space-xl);">
+                <div class="empty-icon">🎉</div>
+                <p class="empty-text">All caught up! No pending orders.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Orders Due Soon -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">📅 Due Soon (Next 3 Days)</h2>
+            <a href="{% url 'order_list' %}" class="btn btn-sm btn-secondary">View All</a>
+        </div>
+        <div class="card-body" style="padding: 0;">
+            {% if orders_due_soon %}
+            <div class="table-container" style="border: none;">
+                <table class="data-table">
+                    <tbody>
+                        {% for order in orders_due_soon %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'order_detail' order.pk %}" style="font-weight: 600;">#{{ order.id }}</a>
+                            </td>
+                            <td>
+                                <a href="{% url 'customer_detail' order.customer.pk %}">{{ order.customer.name }}</a>
+                            </td>
+                            <td>
+                                <span style="font-weight: 600; {% if order.days_until_delivery <= 0 %}color: var(--color-danger);{% endif %}">
+                                    {{ order.delivery_date|date:"M d" }}
+                                </span>
+                                {% if order.days_until_delivery == 0 %}
+                                <span class="badge badge-danger" style="margin-left: var(--space-xs);">Today</span>
+                                {% elif order.days_until_delivery == 1 %}
+                                <span class="badge badge-warning" style="margin-left: var(--space-xs);">Tomorrow</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge badge-{{ order.status }}">{{ order.get_status_display }}</span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state" style="padding: var(--space-xl);">
+                <div class="empty-icon">✅</div>
+                <p class="empty-text">No orders due in the next 3 days.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Recent Customers -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">👥 Recent Customers</h2>
+            <a href="{% url 'customer_list' %}" class="btn btn-sm btn-secondary">View All</a>
+        </div>
+        <div class="card-body" style="padding: 0;">
+            {% if recent_customers %}
+            <div class="table-container" style="border: none;">
+                <table class="data-table">
+                    <tbody>
+                        {% for customer in recent_customers %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'customer_detail' customer.pk %}" style="font-weight: 600;">{{ customer.name }}</a>
+                                <div style="font-size: var(--text-xs); color: var(--color-text-muted);">{{ customer.phone }}</div>
+                            </td>
+                            <td>
+                                <span class="badge" style="background: var(--color-surface-hover); color: var(--color-text-secondary);">{{ customer.get_gender_display }}</span>
+                            </td>
+                            <td style="text-align: right; color: var(--color-text-muted); font-size: var(--text-sm);">
+                                {{ customer.total_orders }} orders
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state" style="padding: var(--space-xl);">
+                <div class="empty-icon">👤</div>
+                <p class="empty-text">No customers yet. <a href="{% url 'customer_create' %}">Add your first customer</a>.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

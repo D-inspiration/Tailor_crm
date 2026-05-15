@@ -1,0 +1,14 @@
+<div style="display: flex; justify-content: space-between; align-items: center; padding: var(--space-sm) 0; border-bottom: 1px solid var(--color-border-light);">
+    <div>
+        <div style="font-weight: 600;">₦{{ payment.amount|floatformat:0 }}</div>
+        <div style="font-size: var(--text-xs); color: var(--color-text-muted);">{{ payment.payment_method }} • {{ payment.payment_date|date:"M d, Y" }}</div>
+    </div>
+    <form method="post" action="{% url 'delete_payment' payment.pk %}"
+          hx-post="{% url 'delete_payment' payment.pk %}"
+          hx-confirm="Delete this payment?"
+          hx-swap="outerHTML"
+          hx-target="closest div">
+        {% csrf_token %}
+        <button type="submit" class="btn-icon" style="width: 28px; height: 28px; font-size: var(--text-xs);">🗑️</button>
+    </form>
+</div>

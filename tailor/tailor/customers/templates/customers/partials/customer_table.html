@@ -1,0 +1,83 @@
+{% if customers %}
+<div class="card">
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Customer</th>
+                    <th>Phone</th>
+                    <th>Gender</th>
+                    <th>Orders</th>
+                    <th>Total Spent</th>
+                    <th>Balance</th>
+                    <th style="text-align: right;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for customer in customers %}
+                <tr>
+                    <td>
+                        <a href="{% url 'customer_detail' customer.pk %}" style="font-weight: 600;">{{ customer.name }}</a>
+                        {% if customer.notes %}
+                        <div style="font-size: var(--text-xs); color: var(--color-text-muted);">{{ customer.notes|truncatechars:40 }}</div>
+                        {% endif %}
+                    </td>
+                    <td>{{ customer.phone }}</td>
+                    <td>
+                        <span class="badge" style="background: var(--color-surface-hover); color: var(--color-text-secondary);">{{ customer.get_gender_display }}</span>
+                    </td>
+                    <td>{{ customer.total_orders }}</td>
+                    <td>₦{{ customer.total_spent|floatformat:0 }}</td>
+                    <td>
+                        {% if customer.outstanding_balance > 0 %}
+                        <span style="color: var(--color-danger); font-weight: 600;">₦{{ customer.outstanding_balance|floatformat:0 }}</span>
+                        {% else %}
+                        <span style="color: var(--color-success);">Paid</span>
+                        {% endif %}
+                    </td>
+                    <td style="text-align: right;">
+                        <div style="display: flex; gap: var(--space-xs); justify-content: flex-end;">
+                            <a href="{% url 'customer_detail' customer.pk %}" class="btn-icon" title="View">👁️</a>
+                            <a href="{% url 'customer_edit' customer.pk %}" class="btn-icon" title="Edit">✏️</a>
+                            <a href="{% url 'order_create' %}?customer={{ customer.pk }}" class="btn-icon" title="New Order" style="background: var(--color-success-bg); border-color: var(--color-success);">📋</a>
+                            <a href="https://wa.me/{{ customer.phone }}" target="_blank" class="btn-icon" title="WhatsApp" style="background: #d1fae5; border-color: var(--color-success);">💬</a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if customers.has_other_pages %}
+    <div class="card-footer">
+        <div class="pagination">
+            {% if customers.has_previous %}
+            <a href="?page={{ customers.previous_page_number }}{% if query %}&q={{ query }}{% endif %}" class="page-link">← Prev</a>
+            {% endif %}
+
+            {% for num in customers.paginator.page_range %}
+                {% if customers.number == num %}
+                <span class="page-link active">{{ num }}</span>
+                {% elif num > customers.number|add:'-3' and num < customers.number|add:'3' %}
+                <a href="?page={{ num }}{% if query %}&q={{ query }}{% endif %}" class="page-link">{{ num }}</a>
+                {% endif %}
+            {% endfor %}
+
+            {% if customers.has_next %}
+            <a href="?page={{ customers.next_page_number }}{% if query %}&q={{ query }}{% endif %}" class="page-link">Next →</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% else %}
+<div class="empty-state card" style="padding: var(--space-2xl);">
+    <div class="empty-icon">👥</div>
+    <h3 class="empty-title">No customers found</h3>
+    <p class="empty-text">{% if query %}Try a different search term{% else %}Get started by adding your first customer{% endif %}</p>
+    {% if not query %}
+    <a href="{% url 'customer_create' %}" class="btn btn-primary">Add Customer</a>
+    {% endif %}
+</div>
+{% endif %}

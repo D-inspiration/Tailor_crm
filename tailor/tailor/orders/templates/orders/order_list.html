@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div x-data="{ pageTitle: 'Orders' }"></div>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">📋 Orders</h1>
+        <p style="color: var(--color-text-secondary); margin-top: var(--space-xs);">{{ total_count }} total orders</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'order_create' %}" class="btn btn-primary">
+            <span>➕</span> New Order
+        </a>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card" style="margin-bottom: var(--space-lg);">
+    <div class="card-body">
+        <div style="display: flex; flex-wrap: wrap; gap: var(--space-md); align-items: center;">
+            <div class="search-wrapper" style="max-width: 300px; flex: 1;">
+                <span class="search-icon">🔍</span>
+                <input 
+                    type="text" 
+                    class="search-input"
+                    placeholder="Search orders..."
+                    value="{{ query }}"
+                    hx-get="{% url 'order_list' %}"
+                    hx-trigger="keyup changed delay:300ms"
+                    hx-target="#order-table"
+                    hx-push-url="true"
+                    name="q"
+                >
+            </div>
+
+            <div style="display: flex; gap: var(--space-xs); flex-wrap: wrap;">
+                <a href="{% url 'order_list' %}" class="filter-pill {% if not status_filter %}active{% endif %}">All</a>
+                <a href="?status=pending" class="filter-pill {% if status_filter == 'pending' %}active{% endif %}">Pending</a>
+                <a href="?status=in_progress" class="filter-pill {% if status_filter == 'in_progress' %}active{% endif %}">In Progress</a>
+                <a href="?status=ready" class="filter-pill {% if status_filter == 'ready' %}active{% endif %}">Ready</a>
+                <a href="?status=delivered" class="filter-pill {% if status_filter == 'delivered' %}active{% endif %}">Delivered</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Order Table -->
+<div id="order-table">
+    {% include 'orders/partials/order_table.html' %}
+</div>
+
+{% endblock %}

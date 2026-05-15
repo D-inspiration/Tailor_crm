@@ -1,0 +1,152 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="dashboard">
+    <!-- Page Header -->
+    <div class="page-header">
+        <h1 class="page-title">Dashboard</h1>
+        <div class="page-actions">
+            <a href="{% url 'customer_create' %}" class="btn btn-primary">
+                <span>+</span> New Customer
+            </a>
+            <a href="{% url 'order_create' %}" class="btn btn-secondary">
+                <span>+</span> New Order
+            </a>
+        </div>
+    </div>
+
+    <!-- Subscription Banner -->
+    <div class="subscription-banner {% if sub.plan == 'free' %}free-plan{% endif %}">
+        <div class="plan-info">
+            <span class="plan-badge">{{ sub.plan|title }}</span>
+            {% if sub.plan == 'free' %}
+
+            <span class="upgrade-nudge">
+                🚀 You're on {{ sub.plan|title }}. 
+                {% if sub.plan == 'free' %}
+                <a href="{% url 'upgrade_plan' %}">Upgrade for ₦1,500/month</a>
+                {% elif sub.plan == 'starter' %}
+                <a href="{% url 'upgrade_plan' %}">Upgrade to Growth</a>
+                {% elif sub.plan == 'growth' %}
+                <a href="{% url 'upgrade_plan' %}">Upgrade to Pro</a>
+                {% endif %}
+            </span>
+            
+            {% endif %}
+        </div>
+        <div class="usage-bars">
+            <div class="usage-item">
+                <label>Customers</label>
+                <div class="progress-bar">
+                    <div class="progress-fill {% if sub.is_near_limit %}warning{% endif %}" 
+                         style="width: {{ sub.customer_percent }}%"></div>
+                </div>
+                <span class="usage-text">{{ sub.customer_usage }} / {{ sub.customer_limit }}</span>
+                {% if sub.is_near_limit %}
+                <span class="limit-warning">⚠️ Almost full</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Grid -->
+    <div class="stats-grid">
+        <div class="stat-card primary">
+            <div class="stat-icon">👥</div>
+            <div class="stat-value">{{ total_customers }}</div>
+            <div class="stat-label">Total Customers</div>
+        </div>
+        <div class="stat-card success">
+            <div class="stat-icon">📋</div>
+            <div class="stat-value">{{ total_orders }}</div>
+            <div class="stat-label">Total Orders</div>
+        </div>
+        <div class="stat-card warning">
+            <div class="stat-icon">⏳</div>
+            <div class="stat-value">{{ pending_orders }}</div>
+            <div class="stat-label">Pending Orders</div>
+        </div>
+        <div class="stat-card danger">
+            <div class="stat-icon">📅</div>
+            <div class="stat-value">{{ orders_due_today }}</div>
+            <div class="stat-label">Due Today</div>
+        </div>
+        <div class="stat-card primary">
+            <div class="stat-icon">💰</div>
+            <div class="stat-value">₦{{ outstanding_balance|floatformat:0|default:"0" }}</div>
+            <div class="stat-label">Outstanding Balance</div>
+        </div>
+        <div class="stat-card success">
+            <div class="stat-icon">🚚</div>
+            <div class="stat-value">{{ orders_due_soon|length }}</div>
+            <div class="stat-label">Due Soon (3 days)</div>
+        </div>
+    </div>
+
+    <!-- Two Column Layout -->
+    <div class="dashboard-section">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+            <!-- Recent Customers -->
+            <div class="card">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <h2 class="card-title" style="font-size: 1.125rem;">Recent Customers</h2>
+                    <a href="{% url 'customer_list' %}" class="btn btn-sm btn-secondary">View All</a>
+                </div>
+                <div class="card-body" style="padding: 0;">
+                    {% if recent_customers %}
+                        {% for customer in recent_customers|slice:":3" %}
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; border-bottom: 1px solid var(--color-border-light);">
+                            <div>
+                                <div style="font-weight: 600; font-size: 0.9375rem;">{{ customer.name }}</div>
+                                <div style="font-size: 0.8125rem; color: var(--color-text-secondary);">{{ customer.phone }}</div>
+                            </div>
+                            <a href="{% url 'customer_detail' customer.pk %}" style="font-size: 1.25rem;">👁️</a>
+                        </div>
+                        {% endfor %}
+                        {% if recent_customers|length > 3 %}
+                        <div style="text-align: center; padding: 0.75rem;">
+                            <a href="{% url 'customer_list' %}" style="font-size: 0.875rem; color: var(--color-primary);">+ {{ recent_customers|length|add:"-3" }} more</a>
+                        </div>
+                        {% endif %}
+                    {% else %}
+                    <div style="text-align: center; padding: 2rem; color: var(--color-text-muted);">
+                        No customers yet
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Pending Orders -->
+            <div class="card">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <h2 class="card-title" style="font-size: 1.125rem;">Pending Orders</h2>
+                    <a href="{% url 'order_list' %}" class="btn btn-sm btn-secondary">View All</a>
+                </div>
+                <div class="card-body" style="padding: 0;">
+                    {% if pending_orders_list %}
+                        {% for order in pending_orders_list|slice:":3" %}
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; border-bottom: 1px solid var(--color-border-light);">
+                            <div>
+                                <div style="font-weight: 600; font-size: 0.9375rem;">#{{ order.id }} — {{ order.customer.name }}</div>
+                                <div style="font-size: 0.8125rem; color: var(--color-text-secondary);">Due: {{ order.delivery_date|default:"TBD" }}</div>
+                            </div>
+                            <span class="badge badge-{{ order.status }}">{{ order.status|title }}</span>
+                        </div>
+                        {% endfor %}
+                        {% if pending_orders_list|length > 3 %}
+                        <div style="text-align: center; padding: 0.75rem;">
+                            <a href="{% url 'order_list' %}" style="font-size: 0.875rem; color: var(--color-primary);">+ {{ pending_orders_list|length|add:"-3" }} more</a>
+                        </div>
+                        {% endif %}
+                    {% else %}
+                    <div style="text-align: center; padding: 2rem; color: var(--color-text-muted);">
+                        No pending orders
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

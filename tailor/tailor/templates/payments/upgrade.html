@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% load custom_filters %}
+
+{% block content %}
+<div class="dashboard">
+    <h1 class="page-title">Upgrade Your Plan</h1>
+    <p style="color: var(--color-text-secondary); margin-bottom: 2rem;">
+        Current plan: <span class="plan-badge">{{ current_plan|title }}</span>
+    </p>
+    
+    <div class="stats-grid" style="margin-top: 2rem;">
+        {% for plan_key, price in plans.items %}
+        <div class="card" style="text-align: center; padding: 2rem; {% if current_plan == plan_key %}border: 2px solid var(--color-primary);{% endif %}">
+            <h2 style="text-transform: uppercase; font-size: 1.5rem; margin-bottom: 0.5rem;">{{ plan_names|get_item:plan_key }}</h2>
+            <div style="font-size: 2.5rem; font-weight: 800; color: var(--color-primary); margin-bottom: 1rem;">
+                ₦{{ price }}<<span style="font-size: 1rem; color: var(--color-text-secondary);">/month</span>
+            </div>
+            
+            <ul style="text-align: left; margin: 1.5rem 0; padding-left: 1.5rem; color: var(--color-text-secondary);">
+                {% if plan_key == 'starter' %}
+                <li>150 customers</li>
+                <li>100 orders/month</li>
+                <li>1GB storage</li>
+                <li>WhatsApp reminders</li>
+                {% elif plan_key == 'growth' %}
+                <li>1,000 customers</li>
+                <li>Unlimited orders</li>
+                <li>5GB storage</li>
+                <li>Auto WhatsApp</li>
+                <li>Export data</li>
+                {% elif plan_key == 'pro' %}
+                <li>Unlimited customers</li>
+                <li>Unlimited everything</li>
+                <li>10GB storage</li>
+                <li>Staff accounts</li>
+                <li>Priority support</li>
+                {% endif %}
+            </ul>
+            
+            {% if current_plan == plan_key %}
+            <button class="btn btn-secondary" disabled>Current Plan</button>
+            {% else %}
+            <a href="{% url 'checkout' plan=plan_key %}" class="btn btn-primary btn-lg">
+                Upgrade Now
+            </a>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

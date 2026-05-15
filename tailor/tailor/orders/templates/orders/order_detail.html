@@ -1,0 +1,198 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div x-data="{ pageTitle: 'Order #{{ order.id }}', showPaymentForm: false }"></div>
+
+<!-- Order Header -->
+<div class="card" style="margin-bottom: var(--space-xl);">
+    <div class="card-body">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: var(--space-lg);">
+            <div>
+                <div style="display: flex; align-items: center; gap: var(--space-md); margin-bottom: var(--space-sm);">
+                    <h1 style="font-size: var(--text-2xl); font-weight: 800;">Order #{{ order.id }}</h1>
+                    <span class="badge badge-{{ order.status }}">{{ order.get_status_display }}</span>
+                    {% if order.days_until_delivery <= 0 and order.status != 'delivered' %}
+                    <span class="badge badge-danger">Overdue</span>
+                    {% endif %}
+                </div>
+                <div style="color: var(--color-text-secondary); font-size: var(--text-sm);">
+                    Created {{ order.created_at|date:"F d, Y \a\t h:i A" }}
+                </div>
+            </div>
+            <div style="display: flex; gap: var(--space-sm); flex-wrap: wrap;">
+                <a href="{% url 'order_edit' order.pk %}" class="btn btn-secondary">✏️ Edit</a>
+                <a href="https://wa.me/{{ order.customer.phone }}?text=Hello%20{{ order.customer.name }},%20your%20order%20%23{{ order.id }}%20is%20{{ order.get_status_display|lower }}.%20{% if order.balance > 0 %}Balance%20remaining:%20N{{ order.balance|floatformat:0 }}.{% endif %}" target="_blank" class="btn btn-success" style="background: #25d366;">💬 WhatsApp</a>
+            </div>
+        </div>
+
+        <!-- Customer Info -->
+        <div style="margin-top: var(--space-lg); padding: var(--space-lg); background: var(--color-surface-hover); border-radius: var(--radius-lg); display: flex; align-items: center; gap: var(--space-lg);">
+            <div style="width: 50px; height: 50px; border-radius: 50%; background: var(--color-primary); display: flex; align-items: center; justify-content: center; font-size: 1.5rem; color: white; font-weight: 700;">
+                {{ order.customer.name|first|upper }}
+            </div>
+            <div>
+                <div style="font-weight: 600;"><a href="{% url 'customer_detail' order.customer.pk %}">{{ order.customer.name }}</a></div>
+                <div style="font-size: var(--text-sm); color: var(--color-text-secondary);">{{ order.customer.phone }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--space-xl);">
+    <!-- Order Details -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">📋 Order Details</h2>
+        </div>
+        <div class="card-body">
+            {% if order.style_image %}
+            <div style="margin-bottom: var(--space-lg);">
+                <img src="{{ order.style_image.url }}" alt="Style reference" style="width: 100%; max-height: 300px; object-fit: cover; border-radius: var(--radius-md);">
+            </div>
+            {% endif %}
+
+            <div class="form-group" style="margin-bottom: var(--space-md);">
+                <label class="form-label">Style Description</label>
+                <p style="padding: var(--space-sm); background: var(--color-surface-hover); border-radius: var(--radius-md);">{{ order.style_note|linebreaksbr }}</p>
+            </div>
+
+            {% if order.fabric_details %}
+            <div class="form-group" style="margin-bottom: var(--space-md);">
+                <label class="form-label">Fabric Details</label>
+                <p style="padding: var(--space-sm); background: var(--color-surface-hover); border-radius: var(--radius-md);">{{ order.fabric_details|linebreaksbr }}</p>
+            </div>
+            {% endif %}
+
+            <div class="form-group" style="margin-bottom: var(--space-md);">
+                <label class="form-label">Delivery Date</label>
+                <p style="font-weight: 600; {% if order.days_until_delivery <= 0 and order.status != 'delivered' %}color: var(--color-danger);{% endif %}">
+                    {{ order.delivery_date|date:"F d, Y" }}
+                    {% if order.days_until_delivery == 0 and order.status != 'delivered' %}
+                    (Due Today!)
+                    {% elif order.days_until_delivery > 0 %}
+                    ({{ order.days_until_delivery }} days left)
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Financial Summary -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">💰 Payment Summary</h2>
+        </div>
+        <div class="card-body">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg); margin-bottom: var(--space-lg);">
+                <div style="text-align: center; padding: var(--space-lg); background: var(--color-surface-hover); border-radius: var(--radius-lg);">
+                    <div style="font-size: var(--text-xs); color: var(--color-text-secondary); text-transform: uppercase; font-weight: 600;">Total Amount</div>
+                    <div style="font-size: var(--text-2xl); font-weight: 800; margin-top: var(--space-xs);">₦{{ order.amount|floatformat:0 }}</div>
+                </div>
+                <div style="text-align: center; padding: var(--space-lg); background: {% if order.balance > 0 %}var(--color-danger-bg){% else %}var(--color-success-bg){% endif %}; border-radius: var(--radius-lg);">
+                    <div style="font-size: var(--text-xs); color: var(--color-text-secondary); text-transform: uppercase; font-weight: 600;">Balance</div>
+                    <div style="font-size: var(--text-2xl); font-weight: 800; margin-top: var(--space-xs); {% if order.balance > 0 %}color: var(--color-danger);{% else %}color: var(--color-success);{% endif %}">
+                        {% if order.balance > 0 %}₦{{ order.balance|floatformat:0 }}{% else %}Paid ✓{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Payment History -->
+            <h4 style="font-weight: 600; margin-bottom: var(--space-md);">Payment History</h4>
+
+            {% if payments %}
+            <div style="margin-bottom: var(--space-lg);">
+                {% for payment in payments %}
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--space-sm) 0; border-bottom: 1px solid var(--color-border-light);">
+                    <div>
+                        <div style="font-weight: 600;">₦{{ payment.amount|floatformat:0 }}</div>
+                        <div style="font-size: var(--text-xs); color: var(--color-text-muted);">{{ payment.payment_method }} • {{ payment.payment_date|date:"M d, Y" }}</div>
+                    </div>
+                    <form method="post" action="{% url 'delete_payment' payment.pk %}"
+                          hx-post="{% url 'delete_payment' payment.pk %}"
+                          hx-confirm="Delete this payment?"
+                          hx-swap="outerHTML"
+                          hx-target="closest div">
+                        {% csrf_token %}
+                        <button type="submit" class="btn-icon" style="width: 28px; height: 28px; font-size: var(--text-xs);">🗑️</button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p style="color: var(--color-text-muted); margin-bottom: var(--space-lg);">No payments recorded yet.</p>
+            {% endif %}
+
+            <!-- Add Payment Button -->
+            {% if order.balance > 0 %}
+            <button class="btn btn-primary" style="width: 100%;" @click="showPaymentForm = !showPaymentForm">
+                ➕ Record Payment
+            </button>
+
+            <div x-show="showPaymentForm" x-cloak style="margin-top: var(--space-lg); padding: var(--space-lg); background: var(--color-surface-hover); border-radius: var(--radius-lg);">
+                <h4 style="margin-bottom: var(--space-md); font-weight: 600;">Record Payment</h4>
+                <form method="post" action="{% url 'add_payment' order.pk %}"
+                      hx-post="{% url 'add_payment' order.pk %}"
+                      hx-target=".card-body"
+                      hx-swap="innerHTML"
+                      @htmx:after-request="showPaymentForm = false">
+                    {% csrf_token %}
+                    <div class="form-row">
+                        <div class="form-group" style="margin-bottom: var(--space-md);">
+                            <label class="form-label">Amount (₦)</label>
+                            <input type="number" name="amount" class="form-control" step="0.01" max="{{ order.balance }}" placeholder="e.g. 5000" required>
+                        </div>
+                        <div class="form-group" style="margin-bottom: var(--space-md);">
+                            <label class="form-label">Payment Method</label>
+                            <select name="payment_method" class="form-control">
+                                <option value="cash">Cash</option>
+                                <option value="transfer">Bank Transfer</option>
+                                <option value="pos">POS</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-bottom: var(--space-md);">
+                        <label class="form-label">Notes</label>
+                        <input type="text" name="notes" class="form-control" placeholder="Optional notes">
+                    </div>
+                    <div style="display: flex; gap: var(--space-sm);">
+                        <button type="submit" class="btn btn-primary">Record Payment</button>
+                        <button type="button" class="btn btn-secondary" @click="showPaymentForm = false">Cancel</button>
+                    </div>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Status Update -->
+<div class="card" style="margin-top: var(--space-xl);">
+    <div class="card-header">
+        <h2 class="card-title">🔄 Update Status</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" action="{% url 'update_status' order.pk %}" style="display: flex; gap: var(--space-md); flex-wrap: wrap;">
+            {% csrf_token %}
+            {% for value, label in status_choices %}
+            <button type="submit" name="status" value="{{ value }}" 
+                    class="btn {% if order.status == value %}btn-primary{% else %}btn-secondary{% endif %}"
+                    {% if order.status == value %}disabled{% endif %}>
+                {% if order.status == value %}✓ {% endif %}{{ label }}
+            </button>
+            {% endfor %}
+        </form>
+    </div>
+</div>
+
+<!-- Delete Order -->
+<div style="margin-top: var(--space-xl); text-align: center;">
+    <form method="post" action="{% url 'order_delete' order.pk %}" style="display: inline;">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger" style="background: transparent; color: var(--color-danger); border: 1px solid var(--color-danger);"
+                onclick="return confirm('Delete this order?')">
+            🗑️ Delete Order
+        </button>
+    </form>
+</div>
+{% endblock %}

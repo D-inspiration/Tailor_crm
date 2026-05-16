@@ -8,6 +8,7 @@ import json
 
 from services.monnify_client import MonnifyClient
 from services.subscription_client import SubscriptionClient
+from services.identity import get_flask_user_id
 
 PLAN_PRICES = {
     'starter': 1500,
@@ -24,7 +25,7 @@ PLAN_NAMES = {
 @login_required
 def upgrade_plan(request):
     """Show upgrade options."""
-    flask_user_id = request.session.get('flask_user_id')
+    flask_user_id = get_flask_user_id(request)
     if flask_user_id is None:
         flask_user_id = request.user.id
     
@@ -45,7 +46,7 @@ def checkout(request, plan):
     
     amount = PLAN_PRICES[plan]
     user = request.user
-    flask_user_id = request.session.get('flask_user_id')
+    flask_user_id = get_flask_user_id(request)
     if flask_user_id is None:
         flask_user_id = user.id
     
@@ -88,55 +89,82 @@ def checkout(request, plan):
 @login_required
 def payment_callback(request):
     """Handle Monnify redirect after payment."""
+    print(f"\n{'='*60}")
+    print(f"[PAYMENT_CALLBACK] ====== START ======")
+    print(f"[PAYMENT_CALLBACK] Full URL: {request.build_absolute_uri()}")
+    print(f"[PAYMENT_CALLBACK] GET params: {dict(request.GET)}")
+    
     payment_ref = request.GET.get('paymentReference')
     transaction_ref = request.GET.get('transactionReference')
-    status = request.GET.get('paymentStatus', 'FAILED')
+    
+    print(f"[PAYMENT_CALLBACK] payment_ref={payment_ref}")
+    print(f"[PAYMENT_CALLBACK] transaction_ref={transaction_ref}")
     
     pending_ref = request.session.get('pending_payment_ref')
     pending_plan = request.session.get('pending_plan')
     
+    print(f"[PAYMENT_CALLBACK] pending_ref={pending_ref}")
+    print(f"[PAYMENT_CALLBACK] pending_plan={pending_plan}")
+    
     if not pending_ref or pending_ref != payment_ref:
+        print(f"[PAYMENT_CALLBACK] REF MISMATCH")
         messages.error(request, "Invalid payment session")
         return redirect('dashboard')
     
-    if status == 'PAID':
-        try:
-            monnify = MonnifyClient()
+    try:
+        monnify = MonnifyClient()
+        
+        # If we have transaction_ref from URL, use it directly
+        if transaction_ref:
+            print(f"[PAYMENT_CALLBACK] Using transaction_ref from URL")
             verify_data = monnify.verify_transaction(transaction_ref)
+        else:
+            # Monnify redirect didn't include tx_ref - query by paymentReference
+            print(f"[PAYMENT_CALLBACK] No tx_ref, querying by paymentReference")
+            verify_data = monnify.get_transaction_by_reference(payment_ref)
+        
+        print(f"[PAYMENT_CALLBACK] verify_data={verify_data}")
+        
+        # Check payment status - handle multiple possible field names
+        payment_status = (
+            verify_data.get('paymentStatus') or 
+            verify_data.get('status') or 
+            verify_data.get('transactionStatus') or 
+            'UNKNOWN'
+        )
+        print(f"[PAYMENT_CALLBACK] payment_status='{payment_status}'")
+        
+        if payment_status in ('PAID', 'SUCCESS', 'SUCCESSFUL', 'COMPLETED', 'SETTLED'):
+            flask_user_id = request.session.get('flask_user_id') or request.user.id
             
-            if verify_data.get('paymentStatus') == 'PAID':
-                flask_user_id = request.session.get('flask_user_id')
-                if flask_user_id is None:
-                    flask_user_id = request.user.id
+            print(f"[PAYMENT_CALLBACK] Upgrading user {flask_user_id} to {pending_plan}")
+            success = SubscriptionClient.upgrade_plan(flask_user_id, pending_plan)
+            print(f"[PAYMENT_CALLBACK] upgrade_plan result={success}")
+            
+            if success:
+                for key in ['pending_payment_ref', 'pending_plan', 'pending_amount']:
+                    request.session.pop(key, None)
+                request.session.modified = True
                 
-                # Call Flask to upgrade subscription
-                success = SubscriptionClient.upgrade_plan(flask_user_id, pending_plan)
-                
-                if success:
-                    # Clear pending payment
-                    for key in ['pending_payment_ref', 'pending_plan', 'pending_amount']:
-                        request.session.pop(key, None)
-                    request.session.modified = True
-                    
-                    messages.success(
-                        request, 
-                        f"🎉 Successfully upgraded to {PLAN_NAMES[pending_plan]}! "
-                        f"Your new limits are now active."
-                    )
-                    return redirect('dashboard')
-                else:
-                    messages.error(request, "Payment succeeded but plan update failed. Contact support.")
-                    return redirect('upgrade_plan')
+                print(f"[PAYMENT_CALLBACK] SUCCESS! Redirecting to dashboard")
+                messages.success(request, f"🎉 Upgraded to {pending_plan.title()}!")
+                return redirect('dashboard')
             else:
-                messages.warning(request, "Payment verification pending. Refresh in a moment.")
+                print(f"[PAYMENT_CALLBACK] upgrade_plan FAILED")
+                messages.error(request, "Payment OK but upgrade failed. Contact support.")
                 return redirect('upgrade_plan')
-                
-        except Exception as e:
-            messages.error(request, f"Verification error: {str(e)}")
+        else:
+            print(f"[PAYMENT_CALLBACK] Payment not confirmed: {payment_status}")
+            messages.warning(request, f"Payment status: {payment_status}. Refresh to check.")
             return redirect('upgrade_plan')
-    
-    messages.error(request, "Payment was not completed. Try again.")
-    return redirect('upgrade_plan')
+            
+    except Exception as e:
+        print(f"[PAYMENT_CALLBACK] EXCEPTION: {type(e).__name__}: {e}")
+        import traceback
+        print(f"[PAYMENT_CALLBACK] TRACEBACK:\n{traceback.format_exc()}")
+        messages.error(request, f"Error: {str(e)}")
+        return redirect('upgrade_plan')
+        
 
 @csrf_exempt
 def monnify_webhook(request):
@@ -153,7 +181,7 @@ def monnify_webhook(request):
             transaction_ref = payment_data.get('transactionReference')
             meta_data = payment_data.get('metaData', {})
             
-            flask_user_id = meta_data.get('flask_user_id')
+            flask_user_id = get_flask_user_id(request)
             plan = meta_data.get('plan')
             
             if flask_user_id and plan:

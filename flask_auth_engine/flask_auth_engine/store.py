@@ -18,13 +18,14 @@ DB_PATH = "sbeae.db"
 
 
 def _init_db():
-    """Create tables if they don't exist."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     
+    # Drop and recreate users table with proper AUTOINCREMENT
+    c.execute('DROP TABLE IF EXISTS users')
     c.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY,
+        CREATE TABLE users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             email TEXT UNIQUE,
             phone TEXT,
             password_hash TEXT,
@@ -81,16 +82,31 @@ class UserStore:
     def save(self, user: User) -> User:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
-        c.execute(
-            '''INSERT OR REPLACE INTO users 
-               (id, email, phone, password_hash, is_active, created_at)
-               VALUES (?, ?, ?, ?, ?, ?)''',
-            (user.id, user.email, user.phone, user.password_hash,
-             1 if user.is_active else 0, user.created_at.isoformat() if user.created_at else None)
-        )
-        conn.commit()
-        if not user.id:
+        
+        if user.id is None or user.id == 0:
+            # Insert with NULL id - SQLite auto-increment will assign
+            c.execute(
+                '''INSERT INTO users 
+                   (id, email, phone, password_hash, is_active, created_at)
+                   VALUES (NULL, ?, ?, ?, ?, ?)''',
+                (user.email, user.phone, user.password_hash,
+                 1 if user.is_active else 0, 
+                 user.created_at.isoformat() if user.created_at else None)
+            )
+            conn.commit()
             user.id = c.lastrowid
+        else:
+            # Update existing
+            c.execute(
+                '''INSERT OR REPLACE INTO users 
+                   (id, email, phone, password_hash, is_active, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?)''',
+                (user.id, user.email, user.phone, user.password_hash,
+                 1 if user.is_active else 0, 
+                 user.created_at.isoformat() if user.created_at else None)
+            )
+            conn.commit()
+        
         conn.close()
         return user
 

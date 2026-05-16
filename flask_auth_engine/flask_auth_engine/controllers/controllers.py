@@ -24,12 +24,23 @@ def register():
         return jsonify({"error": f"Missing field: {missing}"}), 400
     if not is_valid_email(data["email"]):
         return jsonify({"error": "Invalid email"}), 400
+    
+    print(f"[AUTH REGISTER] Attempting to register: {data['email']}")
+    
     try:
         user = AuthService.register(data["email"], data["phone"], data["password"])
-        SubscriptionService.get_or_create(user.id)
+        print(f"[AUTH REGISTER] Created user: id={user.id}, email={user.email}")
+        
+        sub = SubscriptionService.get_or_create(user.id)
+        print(f"[AUTH REGISTER] Subscription for user {user.id}: plan={sub.plan}")
+        
         return jsonify({"user": user.to_public()}), 201
     except ValueError as e:
+        print(f"[AUTH REGISTER] ValueError: {e}")
         return jsonify({"error": str(e)}), 409
+    except Exception as e:
+        print(f"[AUTH REGISTER] Exception: {type(e).__name__}: {e}")
+        return jsonify({"error": "registration_failed"}), 500
 
 
 @auth_bp.route("/login", methods=["POST"])
@@ -41,34 +52,39 @@ def login():
     if missing:
         return jsonify({"error": f"Missing field: {missing}"}), 400
 
+    print(f"[AUTH LOGIN] Attempting login: {data['email']}")
+    
     ok, user = AuthService.authenticate(data["email"], data["password"])
+    print(f"[AUTH LOGIN] AuthService.authenticate returned: ok={ok}, user={user}")
+    
     if not ok:
+        print(f"[AUTH LOGIN] Authentication failed for {data['email']}")
         return jsonify({"status": "deny", "reason": "invalid_credentials"}), 401
 
-    # REMOVED: SubscriptionGuard check — now handled in SessionService.create()
-    # sub_ok, sub_reason = SubscriptionGuard.validate(user.id, "sessions")
-    # if not sub_ok:
-    #     return jsonify({"status": "deny", "reason": sub_reason}), 403
+    print(f"[AUTH LOGIN] User authenticated: id={user.id}, email={user.email}")
 
+    # Around line 66 in controllers.py
     result = EventRouter.dispatch(
-        event_type="login",
-        session_id="",            # Login creates the session, no prior session_id
-        user_id=user.id,
-        payload={
+        "login",  # event_type
+        "",       # session_id
+        user.id,  # user_id
+        {         # payload
             "fingerprint_hash": data["fingerprint_hash"],
             "ip_address": request.remote_addr,
             "user_agent": request.headers.get("User-Agent"),
         }
     )
+    
     session = result["session"]
-    SubscriptionService.increment(user.id, "sessions")  # Track usage, don't block
+    
+    print(f"[AUTH LOGIN] Session created: {session['id'][:8]} for user {user.id}")
 
-    logger.info("User %s logged in, session %s", user.id, session["id"][:8])
     return jsonify({
         "status": "allow",
         "session_id": session["id"],
         "user": user.to_public(),
     }), 200
+
     
 
 @auth_bp.route("/logout", methods=["POST"])
@@ -103,31 +119,35 @@ logger = get_logger("EventController")
 @rate_limit(max_calls=200, window_seconds=60)
 def process_event():
     data = request.get_json(silent=True) or {}
-    
-    # Accept either session_id or user_id (session_id optional for server events)
+
     session_id = data.get("session_id")
     user_id = data.get("user_id")
     event_type = data.get("event_type")
     payload = data.get("payload", {})
-    
+
     if not event_type:
         return jsonify({"error": "Missing field: event_type"}), 400
-    if not session_id and not user_id:
+
+    # FIX BUG 1: Use `is None` — not `not` — so user_id=0 (first Flask user) is accepted.
+    # The original code used falsy checks, which blocked every event from user_id=0
+    # because `not 0 == True`. This caused the increment endpoint to return 400,
+    # so usage was never recorded, and Flask's counter stayed at 0 while Django's
+    # Customer.objects.count() grew — producing the "different numbers" desync.
+    if session_id is None and user_id is None:
         return jsonify({"error": "Missing field: session_id or user_id"}), 400
 
-    # ── Subscription guard ────────────────────────────────────────────────
-    # If no user_id but session_id exists, look up user from session
-    if not user_id and session_id:
+    # If no user_id but session_id exists, resolve user from session
+    if user_id is None and session_id is not None:
+        from store import sessions as session_store
         session = session_store.get(session_id)
         if not session:
             return jsonify({"error": "session_not_found"}), 404
         user_id = session.user_id
-    
+
     sub_ok, sub_reason = SubscriptionGuard.validate(user_id, "api_calls")
     if not sub_ok:
         return jsonify({"status": "deny", "reason": sub_reason}), 403
 
-    # ── Risk guard (only if session_id provided) ───────────────────────────
     if session_id:
         risk_status = RiskService.get_status(session_id)
         if risk_status == RISK_BLOCKED:
@@ -135,13 +155,11 @@ def process_event():
         if risk_status == RISK_THROTTLED:
             return jsonify({"status": "throttle", "reason": "risk_throttled"}), 429
 
-    # ── Dispatch ──────────────────────────────────────────────────────────
     try:
         result = EventRouter.dispatch(event_type, session_id or "server", user_id, payload)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
-    # Re-read risk score after processing (only if session exists)
     risk = RiskService.get_or_create(user_id, session_id) if session_id else None
 
     return jsonify({
@@ -153,6 +171,74 @@ def process_event():
     }), 200
 
 
+@event_bp.route("/subscription/increment", methods=["POST"])
+@require_service_auth
+def increment_subscription_usage():
+    data = request.get_json(silent=True) or {}
+
+    user_id = data.get("user_id")
+    resource = data.get("resource")
+
+    # FIX BUG 1 (same issue): user_id=0 is valid — must use `is None`
+    if user_id is None or not resource:
+        return jsonify({"error": "Missing user_id or resource"}), 400
+
+    try:
+        current_usage = SubscriptionGuard.get_usage(user_id, resource)
+        new_usage = current_usage + 1
+        SubscriptionGuard.set_usage(user_id, resource, new_usage)
+
+        return jsonify({
+            "status": "ok",
+            "resource": resource,
+            "previous": current_usage,
+            "current": new_usage,
+        }), 200
+
+    except Exception as e:
+        import traceback
+        logger.error("increment_subscription_usage error: %s\n%s", e, traceback.format_exc())
+        return jsonify({"error": "internal_server_error", "detail": str(e)}), 500
+
+
+@event_bp.route("/subscription/set_usage", methods=["POST"])
+@require_service_auth
+def set_subscription_usage():
+    """
+    Hard-set a usage counter to an exact value.
+    Called by Django on customer create, delete, and login to keep
+    Flask's counter in sync with Django's actual DB count.
+    """
+    data = request.get_json(silent=True) or {}
+
+    user_id = data.get("user_id")
+    resource = data.get("resource")
+    value = data.get("value")
+
+    # FIX: user_id=0 is valid — use `is None`
+    if user_id is None or not resource or value is None:
+        return jsonify({"error": "Missing user_id, resource, or value"}), 400
+
+    try:
+        value = int(value)
+        if value < 0:
+            return jsonify({"error": "value must be >= 0"}), 400
+
+        SubscriptionGuard.set_usage(user_id, resource, value)
+
+        return jsonify({
+            "status": "ok",
+            "resource": resource,
+            "value": value,
+        }), 200
+
+    except Exception as e:
+        import traceback
+        logger.error("set_subscription_usage error: %s\n%s", e, traceback.format_exc())
+        return jsonify({"error": "internal_server_error", "detail": str(e)}), 500
+
+
+    
 """controllers/session_controller.py"""
 from flask import Blueprint, request, jsonify
 from services.services import SessionService
@@ -193,6 +279,9 @@ def validate():
         "risk_score": risk_score
     }), 200
 
+
+    
+    
 @session_bp.route("/subscription/status", methods=["POST"])
 @require_service_auth
 def subscription_status():
@@ -201,16 +290,37 @@ def subscription_status():
     if user_id is None:
         return jsonify({"error": "user_id required"}), 400
     
-    from services.services import SubscriptionService
-    sub = SubscriptionService.get_or_create(user_id)
+    # Read directly from SQLite store
+    from store import SubscriptionStore
+    store = SubscriptionStore()
+    sub = store.get(user_id)
+    
+    if not sub:
+        # Return default free plan if no subscription exists
+        return jsonify({
+            "subscription": {
+                "plan": "free",
+                "status": "active",
+                "limits": {"api_calls": 100, "customers": 20, "events_per_day": 500, "orders_per_month": 10, "sessions": 5, "staff_accounts": 1, "storage_mb": 50},
+                "usage": {"api_calls": 0, "customers": 0, "events_per_day": 0, "orders": 0, "orders_per_month": 0, "sessions": 0, "staff_accounts": 0, "storage_mb": 0},
+                "user_id": user_id
+            },
+            "limits": {"api_calls": 100, "customers": 20, "events_per_day": 500, "orders_per_month": 10, "sessions": 5, "staff_accounts": 1, "storage_mb": 50},
+            "usage": {"api_calls": 0, "customers": 0, "events_per_day": 0, "orders": 0, "orders_per_month": 0, "sessions": 0, "staff_accounts": 0, "storage_mb": 0}
+        }), 200
     
     return jsonify({
-        "subscription": sub.to_dict(),
+        "subscription": {
+            "plan": sub.plan,
+            "status": sub.status,
+            "limits": sub.limits,
+            "usage": sub.usage,
+            "user_id": user_id
+        },
         "limits": sub.limits,
         "usage": sub.usage
     }), 200
-    
-    
+
 @session_bp.route("/subscription/upgrade", methods=["POST"])
 @require_service_auth
 def upgrade_subscription():
@@ -218,32 +328,69 @@ def upgrade_subscription():
     user_id = data.get("user_id")
     plan = data.get("plan")
     
-    if not user_id or not plan:
-        return jsonify({"error": "user_id and plan required"}), 400
+    if user_id is None or not plan:
+        return jsonify({"error": "Missing user_id or plan"}), 400
+    
+    from store import SubscriptionStore
+    store = SubscriptionStore()
+    
+    sub = store.get(user_id)
+    if not sub:
+        sub = Subscription(user_id=user_id)
     
     if plan not in DEFAULT_LIMITS:
-        return jsonify({"error": f"Invalid plan: {plan}"}), 400
+        return jsonify({"error": f"invalid_plan: {plan}"}), 400
     
-    from services.services import SubscriptionService
-    sub = SubscriptionService.get_or_create(user_id)
-    
-    # Update plan and limits
+    # UPGRADE
     sub.plan = plan
     sub.limits = DEFAULT_LIMITS[plan].copy()
-    # Reset usage for new plan period (optional — keep or reset)
-    # sub.usage = {k: 0 for k in sub.limits}
-    store.subscriptions.save(sub)
+    sub.status = SUB_ACTIVE
     
-    logger.info(f"User {user_id} upgraded to {plan} plan. Limits: {sub.limits}")
+    # SET EXPIRATION: 30 days from now for paid plans
+    if plan != "free":
+        sub.expires_at = datetime.now(timezone.utc) + timedelta(days=30)
+    else:
+        sub.expires_at = None
+    
+    store.save(sub)
     
     return jsonify({
         "status": "ok",
         "plan": plan,
         "limits": sub.limits,
-        "message": f"Successfully upgraded to {plan}"
+        "expires_at": sub.expires_at.isoformat() if sub.expires_at else None,
+        "days_remaining": sub.days_remaining(),
+        "user_id": user_id
+    }), 200
+
+    
+@session_bp.route("/subscription/cancel", methods=["POST"])
+@require_service_auth
+def cancel_subscription():
+    data = request.get_json(silent=True) or {}
+    user_id = data.get("user_id")
+    
+    if user_id is None:
+        return jsonify({"error": "user_id required"}), 400
+    
+    from store import SubscriptionStore
+    store = SubscriptionStore()
+    sub = store.get(user_id)
+    
+    if not sub or sub.plan == "free":
+        return jsonify({"error": "no_active_paid_subscription"}), 400
+    
+    sub.cancel()
+    store.save(sub)
+    
+    return jsonify({
+        "status": "cancelled",
+        "plan": sub.plan,
+        "access_until": sub.expires_at.isoformat() if sub.expires_at else None,
+        "message": f"Cancelled. Access continues until {sub.expires_at.date() if sub.expires_at else 'N/A'}"
     }), 200
     
-    
+
 
 @session_bp.route("/revoke", methods=["POST"])
 @require_service_auth

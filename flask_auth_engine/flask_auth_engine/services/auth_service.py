@@ -19,7 +19,7 @@ class AuthService:
         if store.users.get_by_email(email):
             raise ValueError(f"Email already registered: {email}")
         user = User(
-            id=0,
+            #id=0,
             email=email.lower().strip(),
             phone=phone,
             password_hash=sha256(raw_password),

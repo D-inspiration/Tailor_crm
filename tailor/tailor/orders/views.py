@@ -12,6 +12,7 @@ from .forms import OrderForm, PaymentForm, OrderStatusForm, StyleGalleryForm
 from customers.models import Customer
 from services.event_client import track_event
 from services.subscription_client import SubscriptionClient
+from services.identity import get_flask_user_id
 
 
 @login_required
@@ -71,7 +72,7 @@ def order_create(request):
     """Create new order with subscription gate."""
     if request.method == 'POST':
         # GATE: Check order limit
-        flask_user_id = request.session.get('flask_user_id')
+        flask_user_id = get_flask_user_id(request)
         if flask_user_id is None:
             flask_user_id = request.user.id
 

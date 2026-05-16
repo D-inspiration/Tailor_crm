@@ -166,32 +166,36 @@ logger = get_logger("SessionGuard")
 class SessionGuard:
 
     @staticmethod
-    def validate(session_id: str, user_id: int = None) -> tuple[bool, str]:
-        """
-        Returns (is_valid: bool, reason: str).
-        Checks:
-          1. Session exists
-          2. Session is active / not expired
-          3. If user_id provided, session belongs to that user (hard boundary)
-        """
+    def validate(user_id: int, resource: str) -> tuple[bool, str]:
         import store
-        session = store.sessions.get(session_id)
-
-        if not session:
-            return False, "session_not_found"
-
-        if not session.is_valid():
-            return False, f"session_{session.status}"
-
-        if user_id is not None and session.user_id != user_id:
-            logger.error(
-                "BOUNDARY VIOLATION: session %s belongs to user %s, "
-                "request claims user %s",
-                session_id[:8], session.user_id, user_id
-            )
-            return False, "session_user_mismatch"
-
+        sub = store.subscriptions.get(user_id)
+        if not sub:
+            return False, "no_subscription"
+    
+        # Cancelled but still in paid period = allow until expires
+        if sub.is_cancelled():
+            if sub.is_grace_period():
+                return True, "ok_cancelled_grace"
+            else:
+                # Grace period over, downgrade
+                sub.downgrade_to_free()
+                store.subscriptions.save(sub)
+                return False, "subscription_cancelled_expired"
+    
+        # Expired check
+        if sub.is_expired():
+            sub.downgrade_to_free()
+            store.subscriptions.save(sub)
+            return False, "subscription_expired"
+    
+        if not sub.is_active():
+            return False, "subscription_inactive"
+    
+        if sub.limit_exceeded(resource):
+            return False, f"limit_exceeded:{resource}"
+    
         return True, "ok"
+    
 
 
 """
@@ -259,3 +263,55 @@ class SubscriptionGuard:
             )
             return False, f"limit_exceeded:{resource}"
         return True, "ok"
+        
+    @staticmethod
+    def get_usage(user_id, resource):
+        """Get current usage count for a user/resource."""
+        import store
+        sub = store.subscriptions.get(user_id)
+        print(f"[GET_USAGE] user_id={user_id}, sub={sub}, sub.__dict__={getattr(sub, '__dict__', 'no dict')}")
+        if not sub:
+            return 0
+        # Usage is stored as a dict on the subscription object
+        return sub.usage.get(resource, 0)
+    
+    @staticmethod
+    def set_usage(user_id, resource, count):
+        import store
+    
+        print(f"[SET_USAGE] START user_id={user_id}, resource={resource}, count={count}")
+    
+        sub = store.subscriptions.get(user_id)
+    
+        if not sub:
+            print(f"[SET_USAGE] No subscription found for user {user_id}")
+            return
+    
+        print(f"[SET_USAGE] BEFORE save: usage={sub.usage}")
+    
+        old_value = sub.usage.get(resource, 0)
+        sub.usage[resource] = count
+    
+        print(
+            f"[SET_USAGE] CHANGED {resource}: "
+            f"{old_value} -> {sub.usage.get(resource)}"
+        )
+    
+        store.subscriptions.save(sub)
+    
+        print("[SET_USAGE] save() called")
+    
+        # Reload from storage to verify persistence
+        fresh = store.subscriptions.get(user_id)
+    
+        if fresh:
+            print(f"[SET_USAGE] RELOADED usage={fresh.usage}")
+            print(
+                f"[SET_USAGE] VERIFY {resource}="
+                f"{fresh.usage.get(resource)}"
+            )
+        else:
+            print("[SET_USAGE] Reload failed")
+    
+        print("[SET_USAGE] END")
+        

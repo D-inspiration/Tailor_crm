@@ -1,25 +1,31 @@
-// Tailor CRM Service Worker - Offline First
-const CACHE_NAME = 'tailor-crm-v1';
+// Tailor CRM Service Worker - Safe Offline Strategy
+
+const CACHE_NAME = 'tailor-crm-v2';
+
+// Only truly static assets go here
 const STATIC_ASSETS = [
   '/',
   '/static/css/style.css',
-  '/static/manifest.json',
-  '/customers/',
-  '/orders/',
-  '/accounts/login/'
+  '/static/manifest.json'
 ];
 
-// Install event - cache static assets
+// -----------------------------
+// INSTALL EVENT
+// -----------------------------
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(STATIC_ASSETS);
     })
   );
+
+  // Activate immediately
   self.skipWaiting();
 });
 
-// Activate event - clean up old caches
+// -----------------------------
+// ACTIVATE EVENT
+// -----------------------------
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
@@ -30,51 +36,82 @@ self.addEventListener('activate', (event) => {
       );
     })
   );
+
   self.clients.claim();
 });
 
-// Fetch event - serve from cache, fallback to network
+// -----------------------------
+// FETCH EVENT
+// -----------------------------
 self.addEventListener('fetch', (event) => {
   const { request } = event;
 
-  // Skip non-GET requests
-  if (request.method !== 'GET') {
+  // Only handle GET requests
+  if (request.method !== 'GET') return;
+
+  const url = new URL(request.url);
+
+  // ------------------------------------------------
+  // 1. NEVER CACHE AUTH / SESSION ROUTES
+  // ------------------------------------------------
+  if (url.pathname.startsWith('/accounts/')) {
+    event.respondWith(fetch(request));
     return;
   }
 
+  // ------------------------------------------------
+  // 2. BYPASS API / DYNAMIC BACKEND ROUTES
+  // ------------------------------------------------
+  if (
+    url.pathname.startsWith('/api/') ||
+    url.pathname.startsWith('/payments/') ||
+    url.pathname.startsWith('/admin/')
+  ) {
+    event.respondWith(fetch(request));
+    return;
+  }
+
+  // ------------------------------------------------
+  // 3. HTML NAVIGATION STRATEGY
+  // ------------------------------------------------
+  if (request.headers.get('accept')?.includes('text/html')) {
+    event.respondWith(
+      fetch(request)
+        .then((networkResponse) => {
+          return caches.open(CACHE_NAME).then((cache) => {
+            cache.put(request, networkResponse.clone());
+            return networkResponse;
+          });
+        })
+        .catch(() => {
+          // Offline fallback ONLY for UI pages
+          return caches.match('/') || new Response('Offline', { status: 503 });
+        })
+    );
+    return;
+  }
+
+  // ------------------------------------------------
+  // 4. STATIC FILES (CSS/JS/IMAGES)
+  // ------------------------------------------------
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
-      if (cachedResponse) {
-        // Return cached response and fetch update in background
-        fetch(request).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, networkResponse.clone());
-            });
+      const fetchPromise = fetch(request)
+        .then((networkResponse) => {
+          if (!networkResponse || networkResponse.status !== 200) {
+            return networkResponse;
           }
-        }).catch(() => {});
-        return cachedResponse;
-      }
 
-      // Fetch from network
-      return fetch(request).then((networkResponse) => {
-        if (!networkResponse || networkResponse.status !== 200) {
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(request, networkResponse.clone());
+          });
+
           return networkResponse;
-        }
+        })
+        .catch(() => null);
 
-        // Cache the response
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(request, networkResponse.clone());
-        });
-
-        return networkResponse;
-      }).catch(() => {
-        // Return offline fallback for HTML requests
-        if (request.headers.get('accept').includes('text/html')) {
-          return caches.match('/');
-        }
-        return new Response('Offline', { status: 503 });
-      });
+      // Stale-while-revalidate
+      return cachedResponse || fetchPromise;
     })
   );
 });

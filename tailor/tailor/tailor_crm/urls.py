@@ -3,13 +3,14 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib.auth import views as auth_views
-from customers.views import login_with_flask
+from customers.views import login_with_flask, signup
 from payments import views as payment_views
 
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('accounts/login/', login_with_flask, name='login'),
+    path('signup/', signup, name='signup'),
     path('accounts/logout/', auth_views.LogoutView.as_view(), name='logout'),
     path('', include('customers.urls')),
     path('orders/', include('orders.urls')),

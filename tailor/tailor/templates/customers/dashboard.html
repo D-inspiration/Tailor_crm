@@ -1,6 +1,33 @@
 {% extends 'base.html' %}
 
 {% block content %}
+<hr>
+DEBUG START<br>
+
+usage object:
+{{ usage }}
+
+<br><br>
+
+usage.customers:
+[{{ usage.customers|default:0 }}]
+
+<br><br>
+
+subscription usage:
+[{{ subscription.usage.customers }}]
+
+<br><br>
+
+total_customers:
+[{{ total_customers }}]
+
+<br><br>
+
+limits:
+[{{ limits.customers }}]
+
+<hr>
 <div class="dashboard">
     <!-- Page Header -->
     <div class="page-header">
@@ -16,38 +43,93 @@
     </div>
 
     <!-- Subscription Banner -->
-    <div class="subscription-banner {% if sub.plan == 'free' %}free-plan{% endif %}">
-        <div class="plan-info">
-            <span class="plan-badge">{{ sub.plan|title }}</span>
-            {% if sub.plan == 'free' %}
-
-            <span class="upgrade-nudge">
-                🚀 You're on {{ sub.plan|title }}. 
-                {% if sub.plan == 'free' %}
-                <a href="{% url 'upgrade_plan' %}">Upgrade for ₦1,500/month</a>
-                {% elif sub.plan == 'starter' %}
-                <a href="{% url 'upgrade_plan' %}">Upgrade to Growth</a>
-                {% elif sub.plan == 'growth' %}
-                <a href="{% url 'upgrade_plan' %}">Upgrade to Pro</a>
-                {% endif %}
-            </span>
-            
+<div class="subscription-banner {% if subscription.plan == 'free' %}free-plan{% endif %}">
+    
+    <div class="plan-info">
+        <span class="plan-badge">
+            {{ subscription.plan|title }}
+        </span>
+        
+        <!-- STATUS BADGE: Expiration / Cancellation / Grace period -->
+        {% if sub.is_cancelled %}
+            {% if sub.is_grace_period %}
+                <span class="badge badge-warning">⏳ Cancelled - Access until {{ sub.expires_at|date:"M d" }}</span>
+            {% else %}
+                <span class="badge badge-danger">❌ Expired - <a href="{% url 'upgrade_plan' %}">Upgrade to restore</a></span>
             {% endif %}
-        </div>
-        <div class="usage-bars">
-            <div class="usage-item">
-                <label>Customers</label>
-                <div class="progress-bar">
-                    <div class="progress-fill {% if sub.is_near_limit %}warning{% endif %}" 
-                         style="width: {{ sub.customer_percent }}%"></div>
-                </div>
-                <span class="usage-text">{{ sub.customer_usage }} / {{ sub.customer_limit }}</span>
-                {% if sub.is_near_limit %}
-                <span class="limit-warning">⚠️ Almost full</span>
-                {% endif %}
-            </div>
-        </div>
+        {% elif sub.days_remaining <= 7 and sub.plan != 'free' %}
+            <span class="badge badge-warning">⏰ Expires in {{ sub.days_remaining }} days</span>
+        {% endif %}
+        
+        <!-- Upgrade nudge - context-aware based on current plan -->
+        {% if subscription.plan == 'free' %}
+        <span class="upgrade-nudge">
+            🚀 You're on Free. 
+            <a href="{% url 'upgrade_plan' %}?plan=starter" class="upgrade-link">Upgrade for ₦1,500/month</a>
+        </span>
+        {% elif subscription.plan == 'starter' %}
+        <span class="upgrade-nudge">
+            📈 Growing fast? 
+            <a href="{% url 'upgrade_plan' %}?plan=growth" class="upgrade-link">Upgrade to Growth</a>
+        </span>
+        {% elif subscription.plan == 'growth' %}
+        <span class="upgrade-nudge">
+            🏆 Need more power? 
+            <a href="{% url 'upgrade_plan' %}?plan=pro" class="upgrade-link">Upgrade to Pro</a>
+        </span>
+        {% else %}
+        <span class="upgrade-nudge">
+            ✨ You're on Pro (max plan)
+        </span>
+        {% endif %}
     </div>
+
+    <div class="usage-bars">
+
+        <div class="usage-item">
+            <label>Customers</label>
+
+            <div class="progress-bar">
+                <div class="progress-fill {% if is_near_limit %}warning{% endif %}"
+                     style="width: {{ customer_percent }}%">
+                </div>
+            </div>
+
+            <span class="usage-text">
+                {{ customer_usage }} / {{ customer_limit }}
+                ({{ customer_percent }}%)
+            </span>
+        </div>
+
+
+        <div class="usage-item">
+            <label>Orders</label>
+
+            <span class="usage-text">
+                {{ order_usage }} / {{ order_limit }}
+            </span>
+        </div>
+
+
+        <div class="usage-item">
+            <label>API Calls</label>
+
+            <span class="usage-text">
+                {{ api_usage }} / {{ api_limit }}
+            </span>
+        </div>
+
+
+        <div class="usage-item">
+            <label>Sessions</label>
+
+            <span class="usage-text">
+                {{ session_usage }} / {{ session_limit }}
+            </span>
+        </div>
+
+    </div>
+</div>
 
     <!-- Stats Grid -->
     <div class="stats-grid">

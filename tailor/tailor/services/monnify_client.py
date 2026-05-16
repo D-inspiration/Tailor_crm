@@ -66,6 +66,8 @@ class MonnifyClient:
             "metaData": meta_data or {}
         }
         
+        print(f"[MONNIFY INIT] payload={payload}")
+        
         res = requests.post(
             f"{self.base_url}/api/v1/merchant/transactions/init-transaction",
             headers=self._headers(),
@@ -73,17 +75,77 @@ class MonnifyClient:
             timeout=10
         )
         
+        print(f"[MONNIFY INIT] status={res.status_code}")
+        print(f"[MONNIFY INIT] response={res.text[:500]}")
+        
         if res.status_code == 200:
             return res.json()['responseBody']
         raise Exception(f"Monnify init failed: {res.text}")
 
     def verify_transaction(self, transaction_reference):
+        url = f"{self.base_url}/api/v2/transactions/{transaction_reference}"
+        print(f"[MONNIFY VERIFY] URL={url}")
+        print(f"[MONNIFY VERIFY] tx_ref={transaction_reference}")
+        
         res = requests.get(
-            f"{self.base_url}/api/v2/transactions/{transaction_reference}",
+            url,
             headers=self._headers(),
             timeout=10
         )
-        if res.status_code == 200:
-            return res.json()['responseBody']
-        raise Exception(f"Monnify verify failed: {res.text}")
         
+        print(f"[MONNIFY VERIFY] status={res.status_code}")
+        print(f"[MONNIFY VERIFY] response={res.text[:1000]}")
+        
+        if res.status_code == 200:
+            data = res.json()
+            print(f"[MONNIFY VERIFY] parsed={data}")
+            return data.get('responseBody', {})
+        
+        print(f"[MONNIFY VERIFY] FAILED: {res.text}")
+        raise Exception(f"Monnify verify failed: {res.text}")
+
+    def get_transaction_by_reference(self, payment_reference):
+        """Search transaction by payment reference when tx_ref not provided in redirect."""
+        url = f"{self.base_url}/api/v1/merchant/transactions/query"
+        params = {"paymentReference": payment_reference}
+        
+        print(f"[MONNIFY QUERY] URL={url}")
+        print(f"[MONNIFY QUERY] params={params}")
+        
+        res = requests.get(
+            url,
+            headers=self._headers(),
+            params=params,
+            timeout=10
+        )
+        
+        print(f"[MONNIFY QUERY] status={res.status_code}")
+        print(f"[MONNIFY QUERY] response={res.text[:1000]}")
+        
+        if res.status_code == 200:
+            data = res.json()
+            print(f"[MONNIFY QUERY] parsed={data}")
+            
+            # FIX: Monnify query returns transaction directly in responseBody, not in content array
+            response_body = data.get('responseBody', {})
+            
+            # Check if responseBody is a dict (single transaction) or has content array
+            if isinstance(response_body, dict):
+                # Check if it's a paginated response with content
+                if 'content' in response_body and isinstance(response_body['content'], list):
+                    transactions = response_body['content']
+                    if transactions:
+                        tx = transactions[0]
+                        print(f"[MONNIFY QUERY] found tx from content array={tx}")
+                        return tx
+                # Otherwise, responseBody IS the transaction itself
+                elif 'paymentStatus' in response_body:
+                    print(f"[MONNIFY QUERY] found tx directly in responseBody={response_body}")
+                    return response_body
+            
+            print(f"[MONNIFY QUERY] no transactions found, responseBody={response_body}")
+            return {}
+        
+        print(f"[MONNIFY QUERY] FAILED: {res.text}")
+        raise Exception(f"Monnify query failed: {res.text}")
+    

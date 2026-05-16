@@ -8,12 +8,13 @@ from utils.time import utcnow
 
 @dataclass
 class User:
-    id: int
+    
     email: str
     phone: str
     password_hash: str
     is_active: bool = True
     created_at: datetime = field(default_factory=utcnow)
+    id: int = None
 
     def check_password(self, raw_password: str) -> bool:
         return self.password_hash == sha256(raw_password)
@@ -238,8 +239,6 @@ DEFAULT_LIMITS = {
 }
 
 
-
-
 @dataclass
 class Subscription:
     user_id: int
@@ -249,30 +248,38 @@ class Subscription:
     usage: Dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=utcnow)
     expires_at: datetime = field(default=None)
-
-    def __post_init__(self):
-        if not self.limits:
-            self.limits = DEFAULT_LIMITS.get(self.plan, DEFAULT_LIMITS["free"]).copy()
-        if not self.usage:
-            self.usage = {k: 0 for k in self.limits}
+    cancelled_at: datetime = field(default=None)  # Track when cancelled
 
     def is_active(self) -> bool:
-        return self.status == SUB_ACTIVE
-
-    def limit_exceeded(self, resource: str) -> bool:
-        cap = self.limits.get(resource, 0)
-        if cap == -1:                   # unlimited
+        """Active = not expired, not cancelled, and within time limit."""
+        if self.status == SUB_CANCELLED:
             return False
-        return self.usage.get(resource, 0) >= cap
+        if self.status != SUB_ACTIVE:
+            return False
+        if self.plan == "free":
+            return True
+        if self.expires_at is None:
+            return True
+        return datetime.now(timezone.utc) < self.expires_at
 
-    def increment_usage(self, resource: str, amount: int = 1) -> None:
-        self.usage[resource] = self.usage.get(resource, 0) + amount
+    def cancel(self) -> None:
+        """Cancel subscription - keeps access until end of billing period."""
+        self.status = SUB_CANCELLED
+        self.cancelled_at = datetime.now(timezone.utc)
+        # Don't downgrade immediately - let them use until expires_at
 
-    def to_dict(self) -> dict:
-        return {
-            "user_id": self.user_id,
-            "plan": self.plan,
-            "status": self.status,
-            "limits": self.limits,
-            "usage": self.usage,
-        }
+    def downgrade_to_free(self) -> None:
+        """Downgrade to free plan."""
+        self.plan = "free"
+        self.limits = DEFAULT_LIMITS["free"].copy()
+        self.status = SUB_ACTIVE
+        self.expires_at = None
+        self.cancelled_at = None
+
+    def is_cancelled(self) -> bool:
+        return self.status == SUB_CANCELLED
+
+    def is_grace_period(self) -> bool:
+        """Cancelled but still within paid period."""
+        return self.status == SUB_CANCELLED and self.expires_at and datetime.now(timezone.utc) < self.expires_at
+

@@ -2,6 +2,7 @@ from django.http import JsonResponse
 from django.conf import settings
 from django.core.cache import cache
 from services.auth_gateway import AuthGateway
+from services.identity import get_flask_user_id
 
 PUBLIC_PATHS = getattr(settings, 'FLASK_PUBLIC_PATHS', [
     '/login/', '/logout/', '/accounts/', 
@@ -25,7 +26,7 @@ class FlaskSessionMiddleware:
         )
         
         # CRITICAL: Use Flask's user_id, not Django's
-        flask_user_id = request.session.get('flask_user_id')
+        flask_user_id = get_flask_user_id(request)
         user_id = flask_user_id if flask_user_id is not None else request.user.id
         print(f"[MIDDLEWARE] Validating session {session_id[:20] if session_id else 'NONE'}... for user {user_id}")
         

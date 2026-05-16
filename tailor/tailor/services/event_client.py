@@ -1,8 +1,10 @@
 from .auth_gateway import AuthGateway
+from .identity import get_flask_user_id
+
 
 def track_event(request, event_type, payload):
     session_id = getattr(request, "flask_session_id", None) or request.session.get("flask_session_id")
-    user_id = request.session.get('flask_user_id')
+    user_id = get_flask_user_id(request)
     if user_id is None:
         user_id = request.user.id
     

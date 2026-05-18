@@ -6,6 +6,7 @@ Same interface, different behaviour.
 from abc import ABC, abstractmethod
 from typing import Any, Dict
 from utils.logger import get_logger
+from services.subscription_helper import ensure_subscription
 
 logger = get_logger("EventEngine")
 
@@ -166,36 +167,31 @@ logger = get_logger("SessionGuard")
 class SessionGuard:
 
     @staticmethod
-    def validate(user_id: int, resource: str) -> tuple[bool, str]:
+    def validate(session_id: str, user_id: int) -> tuple[bool, str]:
         import store
-        sub = store.subscriptions.get(user_id)
+
+        sub = ensure_subscription(user_id)
+
         if not sub:
             return False, "no_subscription"
-    
-        # Cancelled but still in paid period = allow until expires
+
         if sub.is_cancelled():
             if sub.is_grace_period():
                 return True, "ok_cancelled_grace"
             else:
-                # Grace period over, downgrade
                 sub.downgrade_to_free()
                 store.subscriptions.save(sub)
                 return False, "subscription_cancelled_expired"
-    
-        # Expired check
+
         if sub.is_expired():
             sub.downgrade_to_free()
             store.subscriptions.save(sub)
             return False, "subscription_expired"
-    
+
         if not sub.is_active():
             return False, "subscription_inactive"
-    
-        if sub.limit_exceeded(resource):
-            return False, f"limit_exceeded:{resource}"
-    
+
         return True, "ok"
-    
 
 
 """
@@ -251,11 +247,17 @@ class SubscriptionGuard:
     @staticmethod
     def validate(user_id: int, resource: str) -> tuple[bool, str]:
         import store
-        sub = store.subscriptions.get(user_id)
+        # sub = store.subscriptions.get(user_id)
+        sub = ensure_subscription(user_id)
         if not sub:
             return False, "no_subscription"
         if not sub.is_active():
             return False, "subscription_expired"
+        print(
+            f"[ENGINE SUB] "
+            f"user={user_id} "
+            f"plan={sub.plan}"
+        )
         if sub.limit_exceeded(resource):
             logger.warning(
                 "Limit exceeded for user %s resource=%s plan=%s",

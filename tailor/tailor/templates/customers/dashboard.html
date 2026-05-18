@@ -1,6 +1,8 @@
 {% extends 'base.html' %}
 
 {% block content %}
+
+<!-- ================= DEBUG (DEV ONLY) ================= -->
 <hr>
 DEBUG START<br>
 
@@ -28,207 +30,269 @@ limits:
 [{{ limits.customers }}]
 
 <hr>
+
+
 <div class="dashboard">
-    <!-- Page Header -->
+
+    <!-- ================= HEADER ================= -->
     <div class="page-header">
         <h1 class="page-title">Dashboard</h1>
+
         <div class="page-actions">
             <a href="{% url 'customer_create' %}" class="btn btn-primary">
                 <span>+</span> New Customer
             </a>
+
             <a href="{% url 'order_create' %}" class="btn btn-secondary">
                 <span>+</span> New Order
             </a>
         </div>
     </div>
 
-    <!-- Subscription Banner -->
-<div class="subscription-banner {% if subscription.plan == 'free' %}free-plan{% endif %}">
-    
-    <div class="plan-info">
-        <span class="plan-badge">
-            {{ subscription.plan|title }}
-        </span>
-        
-        <!-- STATUS BADGE: Expiration / Cancellation / Grace period -->
-        {% if sub.is_cancelled %}
-            {% if sub.is_grace_period %}
-                <span class="badge badge-warning">⏳ Cancelled - Access until {{ sub.expires_at|date:"M d" }}</span>
-            {% else %}
-                <span class="badge badge-danger">❌ Expired - <a href="{% url 'upgrade_plan' %}">Upgrade to restore</a></span>
+
+    <!-- ================= SUBSCRIPTION BANNER ================= -->
+    <div class="subscription-banner {% if subscription.plan == 'free' %}free-plan{% endif %}">
+
+        <div class="plan-info">
+
+            <span class="plan-badge">
+                {{ subscription.plan|title }}
+            </span>
+
+            <!-- STATUS -->
+            {% if subscription.is_cancelled %}
+                {% if subscription.is_grace_period %}
+                    <span class="badge badge-warning">
+                        ⏳ Cancelled - Access until {{ subscription.expires_at|date:"M d" }}
+                    </span>
+                {% else %}
+                    <span class="badge badge-danger">
+                        ❌ Expired - <a href="{% url 'upgrade_plan' %}">Upgrade</a>
+                    </span>
+                {% endif %}
+
+            {% elif subscription.days_remaining <= 7 and subscription.plan != 'free' %}
+                <span class="badge badge-warning">
+                    ⏰ Expires in {{ subscription.days_remaining }} days
+                </span>
             {% endif %}
-        {% elif sub.days_remaining <= 7 and sub.plan != 'free' %}
-            <span class="badge badge-warning">⏰ Expires in {{ sub.days_remaining }} days</span>
-        {% endif %}
-        
-        <!-- Upgrade nudge - context-aware based on current plan -->
-        {% if subscription.plan == 'free' %}
-        <span class="upgrade-nudge">
-            🚀 You're on Free. 
-            <a href="{% url 'upgrade_plan' %}?plan=starter" class="upgrade-link">Upgrade for ₦1,500/month</a>
-        </span>
-        {% elif subscription.plan == 'starter' %}
-        <span class="upgrade-nudge">
-            📈 Growing fast? 
-            <a href="{% url 'upgrade_plan' %}?plan=growth" class="upgrade-link">Upgrade to Growth</a>
-        </span>
-        {% elif subscription.plan == 'growth' %}
-        <span class="upgrade-nudge">
-            🏆 Need more power? 
-            <a href="{% url 'upgrade_plan' %}?plan=pro" class="upgrade-link">Upgrade to Pro</a>
-        </span>
-        {% else %}
-        <span class="upgrade-nudge">
-            ✨ You're on Pro (max plan)
-        </span>
-        {% endif %}
-    </div>
 
-    <div class="usage-bars">
 
-        <div class="usage-item">
-            <label>Customers</label>
+            <!-- UPGRADE PROMPTS -->
+            {% if subscription.plan == 'free' %}
+                <span class="upgrade-nudge">
+                    🚀 You're on Free.
+                    <a href="{% url 'upgrade_plan' %}?plan=starter" class="upgrade-link">
+                        Upgrade for ₦1,500/month
+                    </a>
+                </span>
 
-            <div class="progress-bar">
-                <div class="progress-fill {% if is_near_limit %}warning{% endif %}"
-                     style="width: {{ customer_percent }}%">
+            {% elif subscription.plan == 'starter' %}
+                <span class="upgrade-nudge">
+                    📈 Growing fast?
+                    <a href="{% url 'upgrade_plan' %}?plan=growth" class="upgrade-link">
+                        Upgrade to Growth
+                    </a>
+                </span>
+
+            {% elif subscription.plan == 'growth' %}
+                <span class="upgrade-nudge">
+                    🏆 Need more power?
+                    <a href="{% url 'upgrade_plan' %}?plan=pro" class="upgrade-link">
+                        Upgrade to Pro
+                    </a>
+                </span>
+
+            {% else %}
+                <span class="upgrade-nudge">
+                    ✨ You're on Pro (max plan)
+                </span>
+            {% endif %}
+
+        </div>
+
+
+        <!-- ================= USAGE BARS ================= -->
+        <div class="usage-bars">
+
+            <div class="usage-item">
+                <label>Customers</label>
+
+                <div class="progress-bar">
+                    <div class="progress-fill {% if is_near_limit %}warning{% endif %}"
+                         style="width: {{ customer_percent }}%">
+                    </div>
                 </div>
+
+                <span class="usage-text">
+                    {{ customer_usage }} / {{ customer_limit }}
+                    ({{ customer_percent }}%)
+                </span>
             </div>
 
-            <span class="usage-text">
-                {{ customer_usage }} / {{ customer_limit }}
-                ({{ customer_percent }}%)
-            </span>
+
+            <div class="usage-item">
+                <label>Orders</label>
+                <span class="usage-text">
+                    {{ order_usage }} / {{ order_limit }}
+                </span>
+            </div>
+
+
+            <div class="usage-item">
+                <label>API Calls</label>
+                <span class="usage-text">
+                    {{ api_usage }} / {{ api_limit }}
+                </span>
+            </div>
+
+
+            <div class="usage-item">
+                <label>Sessions</label>
+                <span class="usage-text">
+                    {{ session_usage }} / {{ session_limit }}
+                </span>
+            </div>
+
         </div>
-
-
-        <div class="usage-item">
-            <label>Orders</label>
-
-            <span class="usage-text">
-                {{ order_usage }} / {{ order_limit }}
-            </span>
-        </div>
-
-
-        <div class="usage-item">
-            <label>API Calls</label>
-
-            <span class="usage-text">
-                {{ api_usage }} / {{ api_limit }}
-            </span>
-        </div>
-
-
-        <div class="usage-item">
-            <label>Sessions</label>
-
-            <span class="usage-text">
-                {{ session_usage }} / {{ session_limit }}
-            </span>
-        </div>
-
     </div>
-</div>
 
-    <!-- Stats Grid -->
+
+    <!-- ================= STATS GRID ================= -->
     <div class="stats-grid">
+
         <div class="stat-card primary">
             <div class="stat-icon">👥</div>
             <div class="stat-value">{{ total_customers }}</div>
             <div class="stat-label">Total Customers</div>
         </div>
+
         <div class="stat-card success">
             <div class="stat-icon">📋</div>
             <div class="stat-value">{{ total_orders }}</div>
             <div class="stat-label">Total Orders</div>
         </div>
+
         <div class="stat-card warning">
             <div class="stat-icon">⏳</div>
             <div class="stat-value">{{ pending_orders }}</div>
             <div class="stat-label">Pending Orders</div>
         </div>
+
         <div class="stat-card danger">
             <div class="stat-icon">📅</div>
             <div class="stat-value">{{ orders_due_today }}</div>
             <div class="stat-label">Due Today</div>
         </div>
+
         <div class="stat-card primary">
             <div class="stat-icon">💰</div>
-            <div class="stat-value">₦{{ outstanding_balance|floatformat:0|default:"0" }}</div>
+            <div class="stat-value">
+                ₦{{ outstanding_balance|floatformat:0|default:"0" }}
+            </div>
             <div class="stat-label">Outstanding Balance</div>
         </div>
+
         <div class="stat-card success">
             <div class="stat-icon">🚚</div>
-            <div class="stat-value">{{ orders_due_soon|length }}</div>
+            <div class="stat-value">
+                {{ orders_due_soon|length }}
+            </div>
             <div class="stat-label">Due Soon (3 days)</div>
         </div>
+
     </div>
 
-    <!-- Two Column Layout -->
+
+    <!-- ================= TWO COLUMN SECTION ================= -->
     <div class="dashboard-section">
+
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
-            <!-- Recent Customers -->
+
+            <!-- RECENT CUSTOMERS -->
             <div class="card">
-                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-                    <h2 class="card-title" style="font-size: 1.125rem;">Recent Customers</h2>
-                    <a href="{% url 'customer_list' %}" class="btn btn-sm btn-secondary">View All</a>
+
+                <div class="card-header"
+                     style="display:flex; justify-content:space-between; align-items:center;">
+                    <h2 class="card-title">Recent Customers</h2>
+                    <a href="{% url 'customer_list' %}" class="btn btn-sm btn-secondary">
+                        View All
+                    </a>
                 </div>
-                <div class="card-body" style="padding: 0;">
+
+                <div class="card-body" style="padding:0;">
+
                     {% if recent_customers %}
                         {% for customer in recent_customers|slice:":3" %}
-                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; border-bottom: 1px solid var(--color-border-light);">
-                            <div>
-                                <div style="font-weight: 600; font-size: 0.9375rem;">{{ customer.name }}</div>
-                                <div style="font-size: 0.8125rem; color: var(--color-text-secondary);">{{ customer.phone }}</div>
+                            <div style="display:flex; justify-content:space-between; padding:1rem; border-bottom:1px solid #eee;">
+                                <div>
+                                    <div style="font-weight:600;">
+                                        {{ customer.name }}
+                                    </div>
+                                    <div style="font-size:0.8rem;">
+                                        {{ customer.phone }}
+                                    </div>
+                                </div>
+                                <a href="{% url 'customer_detail' customer.pk %}">
+                                    👁️
+                                </a>
                             </div>
-                            <a href="{% url 'customer_detail' customer.pk %}" style="font-size: 1.25rem;">👁️</a>
-                        </div>
                         {% endfor %}
-                        {% if recent_customers|length > 3 %}
-                        <div style="text-align: center; padding: 0.75rem;">
-                            <a href="{% url 'customer_list' %}" style="font-size: 0.875rem; color: var(--color-primary);">+ {{ recent_customers|length|add:"-3" }} more</a>
-                        </div>
-                        {% endif %}
                     {% else %}
-                    <div style="text-align: center; padding: 2rem; color: var(--color-text-muted);">
-                        No customers yet
-                    </div>
+                        <div style="padding:2rem; text-align:center;">
+                            No customers yet
+                        </div>
                     {% endif %}
+
                 </div>
             </div>
 
-            <!-- Pending Orders -->
+
+            <!-- PENDING ORDERS -->
             <div class="card">
-                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-                    <h2 class="card-title" style="font-size: 1.125rem;">Pending Orders</h2>
-                    <a href="{% url 'order_list' %}" class="btn btn-sm btn-secondary">View All</a>
+
+                <div class="card-header"
+                     style="display:flex; justify-content:space-between; align-items:center;">
+                    <h2 class="card-title">Pending Orders</h2>
+                    <a href="{% url 'order_list' %}" class="btn btn-sm btn-secondary">
+                        View All
+                    </a>
                 </div>
-                <div class="card-body" style="padding: 0;">
+
+                <div class="card-body" style="padding:0;">
+
                     {% if pending_orders_list %}
                         {% for order in pending_orders_list|slice:":3" %}
-                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; border-bottom: 1px solid var(--color-border-light);">
-                            <div>
-                                <div style="font-weight: 600; font-size: 0.9375rem;">#{{ order.id }} — {{ order.customer.name }}</div>
-                                <div style="font-size: 0.8125rem; color: var(--color-text-secondary);">Due: {{ order.delivery_date|default:"TBD" }}</div>
+                            <div style="display:flex; justify-content:space-between; padding:1rem; border-bottom:1px solid #eee;">
+                                <div>
+                                    <div style="font-weight:600;">
+                                        #{{ order.id }} — {{ order.customer.name }}
+                                    </div>
+                                    <div style="font-size:0.8rem;">
+                                        Due: {{ order.delivery_date|default:"TBD" }}
+                                    </div>
+                                </div>
+
+                                <span class="badge badge-{{ order.status }}">
+                                    {{ order.status|title }}
+                                </span>
                             </div>
-                            <span class="badge badge-{{ order.status }}">{{ order.status|title }}</span>
-                        </div>
                         {% endfor %}
-                        {% if pending_orders_list|length > 3 %}
-                        <div style="text-align: center; padding: 0.75rem;">
-                            <a href="{% url 'order_list' %}" style="font-size: 0.875rem; color: var(--color-primary);">+ {{ pending_orders_list|length|add:"-3" }} more</a>
-                        </div>
-                        {% endif %}
                     {% else %}
-                    <div style="text-align: center; padding: 2rem; color: var(--color-text-muted);">
-                        No pending orders
-                    </div>
+                        <div style="padding:2rem; text-align:center;">
+                            No pending orders
+                        </div>
                     {% endif %}
+
                 </div>
+
             </div>
+
         </div>
+
     </div>
+
 </div>
+
 {% endblock %}
 

@@ -9,8 +9,13 @@ from flask import Flask, jsonify
 from config import Config
 from controllers.controllers import auth_bp, event_bp, session_bp, webhook_bp
 from utils.logger import get_logger
+#from views import bp
+
 
 logger = get_logger("App")
+import store
+print(f"[STORE] Using store module: {store.__file__}")
+print(f"[STORE] SubscriptionStore type: {type(store.subscriptions).__name__}")
 
 
 def create_app(config_class=Config) -> Flask:
@@ -22,7 +27,8 @@ def create_app(config_class=Config) -> Flask:
     app.register_blueprint(event_bp)
     app.register_blueprint(session_bp)
     app.register_blueprint(webhook_bp)
-
+    #app.register_blueprint(bp)
+    
     # ── Health endpoint ────────────────────────────────────────────────────
     @app.get("/health")
     def health():

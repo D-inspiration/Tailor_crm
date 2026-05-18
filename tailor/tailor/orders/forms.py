@@ -1,6 +1,7 @@
 from django import forms
 from django.utils import timezone
 from .models import Order, Payment, StyleGallery
+from customers.models import Customer
 
 
 class OrderForm(forms.ModelForm):
@@ -42,11 +43,23 @@ class OrderForm(forms.ModelForm):
             }),
         }
 
-    def __init__(self, *args, **kwargs):
+    
+
+    def __init__(self, *args, flask_user_id=None, **kwargs):
         super().__init__(*args, **kwargs)
-        from customers.models import Customer
-        self.fields['customer'].queryset = Customer.objects.all().order_by('name')
-        self.fields['delivery_date'].initial = timezone.now().date() + timezone.timedelta(days=7)
+
+        # IMPORTANT: scope customers per tenant
+        if flask_user_id is not None:
+            self.fields['customer'].queryset = Customer.objects.filter(
+                flask_user_id=flask_user_id
+            ).order_by('name')
+        else:
+            self.fields['customer'].queryset = Customer.objects.none()
+
+        # default delivery date
+        self.fields['delivery_date'].initial = (
+            timezone.now().date() + timezone.timedelta(days=7)
+        )
 
 
 class PaymentForm(forms.ModelForm):

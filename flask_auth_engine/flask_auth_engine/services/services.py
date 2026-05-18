@@ -1,7 +1,7 @@
 """services/session_service.py"""
 from datetime import timedelta
 from typing import List, Optional
-from models.models import Session, SESSION_ACTIVE, SESSION_REVOKED
+from models.models import Session, SESSION_ACTIVE, SESSION_REVOKED, DEFAULT_LIMITS
 from utils.hash import generate_session_id
 from utils.time import utcnow
 from utils.logger import get_logger

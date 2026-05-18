@@ -6,6 +6,8 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.utils import timezone
 from datetime import datetime, timedelta
+#from django.core.paginator import Paginator
+from services.ui_helper import paginate
 
 from .models import Customer, Measurement, MeasurementTemplate
 from .forms import CustomerForm, MeasurementForm, QuickSearchForm
@@ -13,15 +15,14 @@ from orders.models import Order
 from services.event_client import track_event
 from services.subscription_client import SubscriptionClient
 from services.identity import get_flask_user_id
-
-
+from services.identity import set_flask_identity
 
 
 @login_required
 def dashboard(request):
     today = timezone.now().date()
 
-    flask_user_id = get_flask_user_id(request)
+    flask_user_id = get_flask_user_id(request, strict=False)
     
 
     # Fetch subscription object from Flask
@@ -38,79 +39,92 @@ def dashboard(request):
     print("customer_limit:", sub.customer_limit)
     print("customer_percent:", sub.customer_percent)
     print("=====================================\n")
-
+    flask_user_id = get_flask_user_id(request, strict=False)
+    
     context = {
-        # CRM stats
-        'total_customers': Customer.objects.count(),
-        'total_orders': Order.objects.count(),
-
-        'pending_orders': Order.objects.filter(
-            status__in=['pending', 'in_progress']
-        ).count(),
-
-        'orders_due_today': Order.objects.filter(
-            delivery_date=today,
-            status__in=['pending', 'in_progress', 'ready']
-        ).count(),
-
-        'recent_customers': Customer.objects.all()[:5],
-
-        'pending_orders_list': (
-            Order.objects.filter(
-                status__in=['pending', 'in_progress']
-            )
-            .select_related('customer')[:10]
-        ),
-
-        'orders_due_soon': (
-            Order.objects.filter(
-                delivery_date__lte=today + timedelta(days=3),
-                delivery_date__gte=today,
-                status__in=['pending', 'in_progress', 'ready']
-            )
-            .select_related('customer')[:10]
-        ),
-
-        'outstanding_balance': (
-            Order.objects.filter(
-                balance__gt=0
-            ).aggregate(total=Sum('balance'))['total']
-            or 0
-        ),
-
-        # Entire object
-        'subscription': sub,
-
-        # Backward compatibility
-        'usage': sub.usage,
-        'limits': sub.limits,
-
-        # Explicit template values
-        'customer_usage': sub.customer_usage,
-        'customer_limit': sub.customer_limit,
-        'customer_percent': sub.customer_percent,
-
-        'order_usage': sub.order_usage,
-        'order_limit': sub.order_limit,
-
-        'session_usage': sub.session_usage,
-        'session_limit': sub.session_limit,
-
-        'api_usage': sub.api_usage,
-        'api_limit': sub.api_limit,
-
-        'storage_usage': sub.storage_usage,
-        'storage_limit': sub.storage_limit,
-
-        'staff_usage': sub.staff_usage,
-        'staff_limit': sub.staff_limit,
-
-        'events_usage': sub.events_usage,
-        'events_limit': sub.events_limit,
-
-        'is_near_limit': sub.is_near_limit,
-        'is_at_limit': sub.is_at_limit,
-        'customers_remaining': sub.customers_remaining,
+            # CRM stats (TENANT-SCOPED)
+            'total_customers': Customer.objects.filter(
+                    flask_user_id=flask_user_id
+            ).count(),
+    
+            'total_orders': Order.objects.filter(
+                    flask_user_id=flask_user_id
+            ).count(),
+    
+            'pending_orders': Order.objects.filter(
+                    flask_user_id=flask_user_id,
+                    status__in=['pending', 'in_progress']
+            ).count(),
+    
+            'orders_due_today': Order.objects.filter(
+                    flask_user_id=flask_user_id,
+                    delivery_date=today,
+                    status__in=['pending', 'in_progress', 'ready']
+            ).count(),
+    
+            'recent_customers': Customer.objects.filter(
+                    flask_user_id=flask_user_id
+            ).order_by('-id')[:5],
+    
+            'pending_orders_list': (
+                    Order.objects.filter(
+                            flask_user_id=flask_user_id,
+                            status__in=['pending', 'in_progress']
+                    )
+                    .select_related('customer')[:10]
+            ),
+    
+            'orders_due_soon': (
+                    Order.objects.filter(
+                            flask_user_id=flask_user_id,
+                            delivery_date__lte=today + timedelta(days=3),
+                            delivery_date__gte=today,
+                            status__in=['pending', 'in_progress', 'ready']
+                    )
+                    .select_related('customer')[:10]
+            ),
+    
+            'outstanding_balance': (
+                    Order.objects.filter(
+                            flask_user_id=flask_user_id,
+                            balance__gt=0
+                    ).aggregate(total=Sum('balance'))['total']
+                    or 0
+            ),
+    
+            # Subscription (Flask source of truth)
+            'subscription': sub,
+    
+            # Backward compatibility
+            'usage': sub.usage,
+            'limits': sub.limits,
+    
+            # Explicit template values
+            'customer_usage': sub.customer_usage,
+            'customer_limit': sub.customer_limit,
+            'customer_percent': sub.customer_percent,
+    
+            'order_usage': sub.order_usage,
+            'order_limit': sub.order_limit,
+    
+            'session_usage': sub.session_usage,
+            'session_limit': sub.session_limit,
+    
+            'api_usage': sub.api_usage,
+            'api_limit': sub.api_limit,
+    
+            'storage_usage': sub.storage_usage,
+            'storage_limit': sub.storage_limit,
+    
+            'staff_usage': sub.staff_usage,
+            'staff_limit': sub.staff_limit,
+    
+            'events_usage': sub.events_usage,
+            'events_limit': sub.events_limit,
+    
+            'is_near_limit': sub.is_near_limit,
+            'is_at_limit': sub.is_at_limit,
+            'customers_remaining': sub.customers_remaining,
     }
 
     return render(
@@ -124,8 +138,12 @@ def dashboard(request):
 def customer_list(request):
     """List all customers with search."""
     query = request.GET.get('q', '')
-    customers = Customer.objects.all()
-
+    flask_user_id = get_flask_user_id(request)
+    
+    customers = Customer.objects.filter(
+        flask_user_id=flask_user_id
+    )
+    
     if query:
         customers = customers.filter(
             Q(name__icontains=query) | Q(phone__icontains=query)
@@ -141,10 +159,16 @@ def customer_list(request):
             'query': query
         })
 
+    flask_user_id = get_flask_user_id(request)
+    
+    qs = Customer.objects.filter(flask_user_id=flask_user_id)
+    
+    customers_page = paginate(qs, request)
+    
     return render(request, 'customers/customer_list.html', {
         'customers': customers_page,
         'query': query,
-        'total_count': Customer.objects.count()
+        'total_count': qs.count()
     })
 
 
@@ -171,7 +195,10 @@ def customer_create(request):
     if request.method == 'POST':
         flask_user_id = get_flask_user_id(request)
         if flask_user_id is None:
-            flask_user_id = request.user.id
+            raise RuntimeError(
+                "flask_user_id missing: Flask identity not initialized. "
+                "Ensure Flask login/session handshake completed."
+            )
 
         allowed, reason = SubscriptionClient.check_limit(flask_user_id, "customers")
 
@@ -193,13 +220,15 @@ def customer_create(request):
 
         form = CustomerForm(request.POST)
         if form.is_valid():
-            customer = form.save()
+            customer = form.save(commit=False)
+            customer.flask_user_id =                     flask_user_id
+            customer.save()
 
             # FIX: After saving to Django DB, sync Flask counter to the real DB count
             # instead of blindly incrementing. This prevents drift if any customer was
             # created/deleted outside this path (e.g. admin panel, shell, migrations).
-            real_count = Customer.objects.count()
-            flask_session_id = request.session.get('flask_session_id')
+            real_count = Customer.objects.filter(flask_user_id=flask_user_id).count()
+            flask_user_id = get_flask_user_id(request)
 
             # Prefer set_usage (idempotent resync) over increment to keep both sides aligned.
             # Falls back to increment_usage if set_usage is not available on the client.
@@ -294,8 +323,11 @@ def customer_delete(request, pk):
         # FIX: Resync Flask counter downward on delete so the usage bar drops correctly.
         flask_user_id = get_flask_user_id(request)
         if flask_user_id is None:
-            flask_user_id = request.user.id
-        real_count = Customer.objects.count()
+            raise RuntimeError(
+                "flask_user_id missing: Flask identity not initialized. "
+                "Ensure Flask login/session handshake completed."
+            )
+        real_count = Customer.objects.filter(flask_user_id=flask_user_id).count()
         if hasattr(SubscriptionClient, 'set_usage'):
             SubscriptionClient.set_usage(flask_user_id, 'customers', real_count)
 
@@ -420,32 +452,53 @@ FLASK_AUTH_URL = "http://127.0.0.1:5050"
 FLASK_SERVICE_SECRET = "django-flask-shared-secret"
 
 User = get_user_model()
+from django.views.decorators.csrf import csrf_exempt
 
-
+@csrf_exempt
 def login_with_flask(request):
+    print("\n[LOGIN FLOW] Starting login_with_flask")
+
     if request.method == 'POST':
         username = request.POST.get('username') or request.POST.get('email')
         password = request.POST.get('password')
 
+        print(f"[INPUT] username={username}, password={'***' if password else None}")
+
         if not username or not password:
+            print("[ERROR] Missing username or password")
             messages.error(request, "Username and password are required")
             return render(request, 'registration/login.html')
 
         # 1. Authenticate with Django
+        print("[STEP 1] Authenticating with Django")
         user = django_authenticate(request, username=username, password=password)
+
         if not user:
+            print("[ERROR] Django authentication failed")
             messages.error(request, "Invalid credentials")
             return render(request, 'registration/login.html')
 
+        print(f"[SUCCESS] Django user authenticated: {user.id}")
+
+
         email = user.email or username
+        phone = (getattr(getattr(user, 'profile', None), 'phone', None)or "08000000000"
+)
+
+        print(f"[DATA] email={email}, phone={phone}")
+
         fingerprint = (
             request.META.get('HTTP_USER_AGENT', 'unknown')[:50]
-            + '-'
-            + request.META.get('REMOTE_ADDR', '0.0.0.0')
+            + '-' +
+            request.META.get('REMOTE_ADDR', '0.0.0.0')
         )
 
-        # 2. Authenticate with Flask
+        print(f"[FINGERPRINT] {fingerprint}")
+
+        # 2. Call Flask login
         try:
+            print("[STEP 2] Calling Flask login")
+
             flask_res = requests.post(
                 f"{FLASK_AUTH_URL}/auth/login",
                 headers={
@@ -455,79 +508,148 @@ def login_with_flask(request):
                 json={
                     'email': email,
                     'password': password,
+                    'phone': phone,
                     'fingerprint_hash': fingerprint
                 },
                 timeout=5
             )
+
             flask_data = flask_res.json()
+            print(f"[FLASK LOGIN RESPONSE] {flask_data}")
+
         except Exception as e:
+            print(f"[ERROR] Flask login request failed: {e}")
             messages.error(request, "Auth service unavailable. Please try again.")
             return render(request, 'registration/login.html')
 
-        # 3. Auto-register in Flask if not yet known
+        # 3. If denied → auto-register → retry login
         if flask_data.get('status') != 'allow':
+            print("[STEP 3] Flask denied login → attempting auto-register")
+
             try:
+                print("[STEP 3A] About to call Flask register")
+            
+                payload = {
+                    "email": email,
+                    "phone": phone,
+                    "password": password
+                }
+            
+                print(f"[REGISTER PAYLOAD] {payload}")
                 register_res = requests.post(
                     f"{FLASK_AUTH_URL}/auth/register",
+                    headers={
+                        "Content-Type": "application/json",
+                        "X-Service-Secret": FLASK_SERVICE_SECRET
+                    },
+                    json=payload,
+                    timeout=5
+                )
+
+                register_data = register_res.json()
+                print(f"[REGISTER RAW STATUS] {register_res.status_code}")
+                print(f"[REGISTER RAW TEXT] {register_res.text}")
+                print(f"[FLASK REGISTER RESPONSE] {register_data}")
+
+            except Exception as e:
+                print(f"[ERROR] Flask register request failed: {e}")
+                messages.error(request, "Auth service unavailable during auto-register.")
+                return render(request, 'registration/login.html')
+
+            # registration success checks
+            register_ok = (
+                register_res.status_code in [200, 201]
+                or register_data.get("status") in ["success", "created", "ok"]
+                or register_data.get("user")
+            )
+            
+            print(f"[REGISTER OK?] {register_ok}")
+            
+            if not register_ok:
+                print("[ERROR] Auto-registration failed")
+                print(f"[REGISTER DATA] {register_data}")
+            
+                messages.error(
+                    request,
+                    "Auto-registration failed."
+                )
+            
+                return render(
+                    request,
+                    'registration/login.html'
+                )
+
+            print("[SUCCESS] Auto-registration complete → retrying login")
+
+            try:
+                flask_res = requests.post(
+                    f"{FLASK_AUTH_URL}/auth/login",
                     headers={
                         'Content-Type': 'application/json',
                         'X-Service-Secret': FLASK_SERVICE_SECRET
                     },
                     json={
                         'email': email,
-                        'phone': (
-                            getattr(getattr(user, 'profile', None), 'phone', None)
-                            or '08000000000'
-                        ),
-                        'password': password
+                        'password': password,
+                        'phone': phone,
+                        'fingerprint_hash': fingerprint
                     },
                     timeout=5
                 )
-                if register_res.status_code == 201:
-                    flask_res = requests.post(
-                        f"{FLASK_AUTH_URL}/auth/login",
-                        headers={
-                            'Content-Type': 'application/json',
-                            'X-Service-Secret': FLASK_SERVICE_SECRET
-                        },
-                        json={
-                            'email': email,
-                            'password': password,
-                            'fingerprint_hash': fingerprint
-                        },
-                        timeout=5
-                    )
-                    flask_data = flask_res.json()
-            except Exception:
-                pass
 
-        # 4. Final gate
-        if flask_data.get('status') != 'allow':
-            messages.error(request, "Auth service rejected login.")
-            return render(request, 'registration/login.html')
+                flask_data = flask_res.json()
+                print(f"[FLASK RETRY LOGIN RESPONSE] {flask_data}")
 
-        # 5. Log into Django
+            except Exception as e:
+                print(f"[ERROR] Flask retry login failed: {e}")
+                messages.error(request, "Auth service unavailable after auto-register.")
+                return render(request, 'registration/login.html')
+
+            if flask_data.get('status') != 'allow':
+                print("[ERROR] Flask still rejected after auto-register")
+                messages.error(request, "Auth service rejected login after auto-registration.")
+                return render(request, 'registration/login.html')
+
+        # 4. Django login
+        print("[STEP 4] Django login success path")
         django_login(request, user)
 
-        # 6. Store Flask session
-        request.session['flask_session_id'] = flask_data['session_id']
-        flask_user_id = get_flask_user_id(request)
-        request.session.modified = True
-        request.session.save()
+        # 5. Set Flask identity
+        print("[STEP 5] Setting Flask identity")
+        set_flask_identity(request, flask_data, email)
 
-        # FIX: After login, resync Flask's customer usage counter with the real Django
-        # DB count. This corrects any drift that accumulated while the user was logged
-        # out (e.g. admin-panel adds, deletions, migrations).
-        flask_user_id = get_flask_user_id(request)
-        real_count = Customer.objects.count()
-        if hasattr(SubscriptionClient, 'set_usage'):
-            try:
-                SubscriptionClient.set_usage(flask_user_id, 'customers', real_count)
-            except Exception:
-                pass  # Non-fatal; counter will self-correct on next dashboard load
+        request.session.modified = True
+
+        # 6. Sync usage safely
+        try:
+            print("[STEP 6] Syncing usage data")
+
+            flask_user_id = get_flask_user_id(request)
+
+            real_count = Customer.objects.filter(
+                flask_user_id=flask_user_id
+            ).count()
+
+            if hasattr(SubscriptionClient, 'set_usage'):
+                SubscriptionClient.set_usage(
+                    flask_user_id,
+                    'customers',
+                    real_count
+                )
+
+            print(f"[USAGE SYNC] flask_user_id={flask_user_id}, count={real_count}")
+
+        except Exception as e:
+            print(f"[WARNING] Usage sync failed: {e}")
+
+        print(
+            f"[FINAL] django={request.user.id} "
+            f"flask={request.session.get('flask_user_id')}"
+        )
 
         return redirect('dashboard')
 
+    print("[END] GET request → rendering login page")
     return render(request, 'registration/login.html')
 
 # customers/views.py
@@ -543,33 +665,74 @@ def signup(request):
         email = request.POST.get('email')
         password = request.POST.get('password')
         password2 = request.POST.get('password2')
-        
+
         if password != password2:
             messages.error(request, "Passwords don't match")
             return render(request, 'registration/signup.html')
-        
+
         if User.objects.filter(username=username).exists():
             messages.error(request, "Username taken")
             return render(request, 'registration/signup.html')
-        
-        # Create Django user only
-        user = User.objects.create_user(username=username, email=email, password=password)
-        
-        # DON'T manually create Flask subscription here
-        # The login flow will auto-register in Flask and sync everything
-        
-        # Log user in (this triggers the full Flask login + sync)
+
+        user = User.objects.create_user(
+            username=username,
+            email=email,
+            password=password
+        )
+
         from django.contrib.auth import authenticate as django_authenticate
         from django.contrib.auth import login as django_login
-        
-        user = django_authenticate(request, username=username, password=password)
+
+        user = django_authenticate(
+            request,
+            username=username,
+            password=password
+        )
+
         django_login(request, user)
-        
-        # Now redirect to dashboard - the login flow handled Flask sync
-        messages.success(request, "Account created! Welcome to Tailor CRM.")
+
+        print("[SIGNUP] Django login complete")
+
+        # force identity sync for MVP
+        try:
+            flask_user_id = request.session.get("flask_user_id")
+
+            print(
+                f"[SIGNUP] flask_user_id after login="
+                f"{flask_user_id}"
+            )
+
+            if not flask_user_id:
+                print(
+                    "[SIGNUP] Flask identity missing. "
+                    "Running login handshake..."
+                )
+
+                login_with_flask(
+                    sender=None,
+                    request=request,
+                    user=user
+                )
+
+                print(
+                    "[SIGNUP] flask_user_id now="
+                    f"{request.session.get('flask_user_id')}"
+                )
+
+        except Exception as e:
+            print(f"[SIGNUP] sync error: {e}")
+
+        messages.success(
+            request,
+            "Account created! Welcome to Tailor CRM."
+        )
+
         return redirect('dashboard')
-    
-    return render(request, 'registration/signup.html')
+
+    return render(
+        request,
+        'registration/signup.html'
+    )
 
 
     

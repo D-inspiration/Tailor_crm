@@ -3,6 +3,7 @@ from django.urls import reverse
 
 
 class Customer(models.Model):
+    flask_user_id = models.IntegerField(db_index=True) 
     GENDER_CHOICES = [
         ('male', 'Male'),
         ('female', 'Female'),

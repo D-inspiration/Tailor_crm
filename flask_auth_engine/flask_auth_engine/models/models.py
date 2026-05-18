@@ -239,47 +239,168 @@ DEFAULT_LIMITS = {
 }
 
 
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Dict, Any, Optional
+
+
+SUB_ACTIVE = "active"
+SUB_CANCELLED = "cancelled"
+SUB_SUSPENDED = "suspended"
+
+
+def utcnow():
+    return datetime.now(timezone.utc)
+
+
 @dataclass
 class Subscription:
     user_id: int
     plan: str = "free"
     status: str = SUB_ACTIVE
+
     limits: Dict[str, Any] = field(default_factory=dict)
     usage: Dict[str, Any] = field(default_factory=dict)
+
     created_at: datetime = field(default_factory=utcnow)
-    expires_at: datetime = field(default=None)
-    cancelled_at: datetime = field(default=None)  # Track when cancelled
+    expires_at: Optional[datetime] = None
+    cancelled_at: Optional[datetime] = None
 
-    def is_active(self) -> bool:
-        """Active = not expired, not cancelled, and within time limit."""
-        if self.status == SUB_CANCELLED:
-            return False
-        if self.status != SUB_ACTIVE:
-            return False
+    # -------------------------
+    # CORE STATE RULES
+    # -------------------------
+    def limit_exceeded(self, resource: str) -> tuple[bool, str]:
+        """
+        Returns (is_exceeded, reason)
+        """
+
+        limit = self.limits.get(resource)
+        used = self.usage.get(resource, 0)
+
+        if limit is None:
+            return False, "no_limit"
+
+        if used >= limit:
+            return True, f"limit_reached: {used}/{limit}"
+
+        return False, "ok"
+
+    def is_expired(self) -> bool:
+        """
+        Expiry is the ONLY hard cutoff rule.
+        Free plans never expire.
+        """
         if self.plan == "free":
-            return True
-        if self.expires_at is None:
-            return True
-        return datetime.now(timezone.utc) < self.expires_at
+            return False
 
-    def cancel(self) -> None:
-        """Cancel subscription - keeps access until end of billing period."""
-        self.status = SUB_CANCELLED
-        self.cancelled_at = datetime.now(timezone.utc)
-        # Don't downgrade immediately - let them use until expires_at
+        if not self.expires_at:
+            return False
 
-    def downgrade_to_free(self) -> None:
-        """Downgrade to free plan."""
-        self.plan = "free"
-        self.limits = DEFAULT_LIMITS["free"].copy()
-        self.status = SUB_ACTIVE
-        self.expires_at = None
-        self.cancelled_at = None
+        expiry = self.expires_at
+        if expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=timezone.utc)
+
+        return utcnow() > expiry
 
     def is_cancelled(self) -> bool:
         return self.status == SUB_CANCELLED
 
+    def is_suspended(self) -> bool:
+        return self.status == SUB_SUSPENDED
+
+    def is_active(self) -> bool:
+        """
+        Active means:
+        - not suspended
+        - not expired
+        """
+        if self.is_suspended():
+            return False
+
+        if self.is_expired():
+            return False
+
+        return True
+
+    # -------------------------
+    # GRACE LOGIC
+    # -------------------------
+
     def is_grace_period(self) -> bool:
-        """Cancelled but still within paid period."""
-        return self.status == SUB_CANCELLED and self.expires_at and datetime.now(timezone.utc) < self.expires_at
+        """
+        Cancelled but still within paid time window.
+        """
+        if not self.is_cancelled():
+            return False
+
+        if not self.expires_at:
+            return False
+
+        expiry = self.expires_at
+        if expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=timezone.utc)
+
+        return utcnow() < expiry
+        
+    def days_remaining(self) -> int:
+        """
+        Returns remaining days until expiry.
+        Free plan = infinite (-1)
+        """
+        if not self.expires_at:
+            return -1  # free plan or no expiry
+    
+        now = datetime.now(timezone.utc)
+    
+        expiry = self.expires_at
+        if expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=timezone.utc)
+    
+        delta = expiry - now
+    
+        return max(delta.days, 0)
+
+    # -------------------------
+    # ACTIONS
+    # -------------------------
+
+    def cancel(self) -> None:
+        """
+        Marks cancellation but does NOT revoke access immediately.
+        """
+        self.status = SUB_CANCELLED
+        self.cancelled_at = utcnow()
+
+    def suspend(self) -> None:
+        """
+        Hard block access immediately.
+        """
+        self.status = SUB_SUSPENDED
+
+    def restore(self) -> None:
+        """
+        Restore to active state (used after payment or admin action).
+        """
+        self.status = SUB_ACTIVE
+        self.cancelled_at = None
+
+    def downgrade_to_free(self) -> None:
+        """
+        Reset to free tier safely.
+        """
+        self.plan = "free"
+        self.status = SUB_ACTIVE
+        self.expires_at = None
+        self.cancelled_at = None
+
+        # optional but safe reset
+        self.limits = {
+            "api_calls": 100,
+            "customers": 20,
+            "events_per_day": 500,
+            "orders_per_month": 10,
+            "sessions": 5,
+            "staff_accounts": 1,
+            "storage_mb": 50
+        }
 

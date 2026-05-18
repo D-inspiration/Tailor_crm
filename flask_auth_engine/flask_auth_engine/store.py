@@ -1,7 +1,8 @@
 """
-store_sqlite.py — SQLite-backed repository layer.
+store.py — SQLite-backed repository layer.
 Drop-in replacement for store.py. Same interface, persistent storage.
 """
+import os
 import sqlite3
 import json
 from typing import Dict, List, Optional
@@ -14,8 +15,15 @@ from models.models import (
     RISK_OK, RISK_THROTTLED, RISK_BLOCKED
 )
 
-DB_PATH = "sbeae.db"
+BASE_DIR = os.path.dirname(
+    os.path.abspath(__file__)
+)
 
+DB_PATH = os.path.join(
+    BASE_DIR,
+    "sbeae.db"
+)
+print("DB PATH:", DB_PATH)
 
 def _init_db():
     conn = sqlite3.connect(DB_PATH)

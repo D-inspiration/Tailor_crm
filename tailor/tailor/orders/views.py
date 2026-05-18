@@ -42,7 +42,7 @@ def order_list(request):
         'status_filter': status_filter,
         'query': query,
         'status_choices': Order.STATUS_CHOICES,
-        'total_count': Order.objects.count(),
+        'total_count': Order.objects.filter(flask_user_id=flask_user_id),
     }
 
     if request.headers.get('HX-Request'):
@@ -74,7 +74,10 @@ def order_create(request):
         # GATE: Check order limit
         flask_user_id = get_flask_user_id(request)
         if flask_user_id is None:
-            flask_user_id = request.user.id
+            raise RuntimeError(
+                "flask_user_id missing: Flask identity not initialized. "
+                "Ensure Flask login/session handshake completed."
+            )
 
         allowed, reason = SubscriptionClient.check_limit(flask_user_id, "orders_per_month")
         

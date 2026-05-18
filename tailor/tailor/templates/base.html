@@ -58,22 +58,37 @@
             <span class="logo-text">Tailor CRM</span>
         </a>
         <div class="header-actions">
-            {% if user.is_authenticated %}
-            <span class="user-name">{{ user.username }}</span>
-            <!-- Risk Badge (visible on mobile) -->
-            {% if request.session.flask_risk_status and request.session.flask_risk_status != 'ok' %}
-              <span class="risk-badge risk-{{ request.session.flask_risk_status }}">
-                {% if request.session.flask_risk_status == 'blocked' %}
-                  🔒 Account Locked
-                {% elif request.session.flask_risk_status == 'throttled' %}
-                  ⚠️ High Risk
-                {% elif request.session.flask_risk_status == 'warning' %}
-                  ⚡ Unusual Activity
-                {% endif %}
-              </span>
-            {% endif %}
-            <a href="{% url 'logout' %}" class="btn-icon" title="Logout">🚪</a>
-            {% endif %}
+        		{% if user.is_authenticated %}
+        		<span class="user-name">{{ user.username }}</span>
+        
+        		<!-- Risk Badge (visible on mobile) -->
+        		{% if request.session.flask_risk_status and request.session.flask_risk_status != 'ok' %}
+        		<span class="risk-badge risk-{{ request.session.flask_risk_status }}">
+        				{% if request.session.flask_risk_status == 'blocked' %}
+        						🔒 Account Locked
+        				{% elif request.session.flask_risk_status == 'throttled' %}
+        						⚠️ High Risk
+        				{% elif request.session.flask_risk_status == 'warning' %}
+        						⚡ Unusual Activity
+        				{% endif %}
+        		</span>
+        		{% endif %}
+        
+        		<!-- Home -->
+        		<a href="{% url 'dashboard' %}" 
+        			 class="btn-icon" 
+        			 title="Home">
+        			 🏠
+        		</a>
+        
+        		<!-- Logout -->
+        		<a href="{% url 'logout' %}" 
+        			 class="btn-icon" 
+        			 title="Logout">
+        			 🚪
+        		</a>
+        
+        		{% endif %}
         </div>
     </header>
 
@@ -123,7 +138,16 @@
                 <span class="user-avatar">👤</span>
                 <div>
                     <div class="user-name">{{ user.username }}</div>
-                    <a href="{% url 'logout' %}" class="logout-link">Logout</a>
+                
+                    <a href="{% url 'dashboard' %}"
+                       class="logout-link">
+                       🏠 Dashboard
+                    </a>
+                
+                    <a href="{% url 'logout' %}"
+                       class="logout-link">
+                       🚪 Logout
+                    </a>
                 </div>
             </div>
             {% endif %}

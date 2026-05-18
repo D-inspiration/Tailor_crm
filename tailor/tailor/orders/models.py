@@ -3,6 +3,7 @@ from django.urls import reverse
 
 
 class Order(models.Model):
+    flask_user_id = models.IntegerField(db_index=True)
     STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('in_progress', 'In Progress'),

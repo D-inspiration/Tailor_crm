@@ -27,7 +27,10 @@ def upgrade_plan(request):
     """Show upgrade options."""
     flask_user_id = get_flask_user_id(request)
     if flask_user_id is None:
-        flask_user_id = request.user.id
+        raise RuntimeError(
+            f"Flask identity missing for Django user {request.user.id}. "
+            "Ensure Flask login/session handshake completed."
+        )
     
     current_sub = SubscriptionClient.get_usage(flask_user_id)
     
@@ -48,8 +51,10 @@ def checkout(request, plan):
     user = request.user
     flask_user_id = get_flask_user_id(request)
     if flask_user_id is None:
-        flask_user_id = user.id
-    
+        raise RuntimeError(
+            f"Flask identity missing for Django user {request.user.id}. "
+            "Ensure Flask login/session handshake completed."
+        )
     # Prevent downgrading or same-plan purchase
     current_sub = SubscriptionClient.get_usage(flask_user_id)
     if current_sub.plan == plan:
@@ -135,7 +140,7 @@ def payment_callback(request):
         print(f"[PAYMENT_CALLBACK] payment_status='{payment_status}'")
         
         if payment_status in ('PAID', 'SUCCESS', 'SUCCESSFUL', 'COMPLETED', 'SETTLED'):
-            flask_user_id = request.session.get('flask_user_id') or request.user.id
+            flask_user_id = get_flask_user_id(request)
             
             print(f"[PAYMENT_CALLBACK] Upgrading user {flask_user_id} to {pending_plan}")
             success = SubscriptionClient.upgrade_plan(flask_user_id, pending_plan)

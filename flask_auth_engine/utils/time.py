@@ -1,15 +1,14 @@
-"""utils/time.py"""
+"""Timezone-aware datetime utilities."""
 from datetime import datetime, timezone
 
 
 def utcnow() -> datetime:
+    """Return timezone-aware UTC now."""
     return datetime.now(timezone.utc)
 
 
 def is_expired(dt: datetime) -> bool:
-    return utcnow() > dt
-
-
-def seconds_until(dt: datetime) -> float:
-    delta = dt - utcnow()
-    return max(0.0, delta.total_seconds())
+    """Check if a datetime is in the past."""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt < utcnow()

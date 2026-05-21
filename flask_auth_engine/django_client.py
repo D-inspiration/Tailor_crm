@@ -1,22 +1,4 @@
-"""
-django_client.py — Drop this anywhere in your Django project.
-Zero extra dependencies beyond requests (already in Django env).
-
-Usage:
-    from flask_client import SBEAEClient
-    client = SBEAEClient()
-
-    # On login:
-    result = client.login(email, password, fingerprint_hash)
-
-    # On every Django view that needs auth:
-    result = client.validate_session(session_id, user_id)
-    if result["status"] != "allow":
-        return HttpResponseForbidden()
-
-    # On any CRM action:
-    result = client.process_event(session_id, user_id, "action", payload)
-"""
+"""Django integration client for SBEAE."""
 import os
 import requests
 from typing import Any, Dict, Optional
@@ -26,12 +8,19 @@ SBEAE_SECRET = os.getenv("DJANGO_SHARED_SECRET", "django-flask-shared-secret")
 
 
 class SBEAEError(Exception):
+    """Raised when SBEAE is unreachable or returns an error."""
     pass
 
 
 class SBEAEClient:
-    def __init__(self, base_url: str = SBEAE_BASE_URL, secret: str = SBEAE_SECRET,
-                 timeout: int = 5):
+    """Zero-dependency client (beyond requests) for Django projects."""
+
+    def __init__(
+        self,
+        base_url: str = SBEAE_BASE_URL,
+        secret: str = SBEAE_SECRET,
+        timeout: int = 5,
+    ):
         self.base_url = base_url.rstrip("/")
         self.secret = secret
         self.timeout = timeout
@@ -45,21 +34,21 @@ class SBEAEClient:
     def _post(self, path: str, data: dict) -> Dict[str, Any]:
         url = f"{self.base_url}{path}"
         try:
-            resp = requests.post(url, json=data, headers=self._headers(),
-                                 timeout=self.timeout)
+            resp = requests.post(
+                url, json=data, headers=self._headers(), timeout=self.timeout
+            )
             return resp.json()
         except requests.RequestException as e:
             raise SBEAEError(f"SBEAE unreachable: {e}") from e
 
-    # ── Auth ───────────────────────────────────────────────────────────────
+    # ── Auth ─────────────────────────────────────────────────────────────────
 
     def register(self, email: str, phone: str, password: str) -> Dict[str, Any]:
         return self._post("/auth/register", {
             "email": email, "phone": phone, "password": password
         })
 
-    def login(self, email: str, password: str,
-              fingerprint_hash: str) -> Dict[str, Any]:
+    def login(self, email: str, password: str, fingerprint_hash: str) -> Dict[str, Any]:
         return self._post("/auth/login", {
             "email": email,
             "password": password,
@@ -69,14 +58,9 @@ class SBEAEClient:
     def logout(self, session_id: str) -> Dict[str, Any]:
         return self._post("/auth/logout", {"session_id": session_id})
 
-    # ── Sessions ───────────────────────────────────────────────────────────
+    # ── Sessions ─────────────────────────────────────────────────────────────
 
-    def validate_session(self, session_id: str,
-                         user_id: Optional[int] = None) -> Dict[str, Any]:
-        """
-        Returns {"status": "allow"|"deny", "reason": "..."}
-        Call this on every Django request that needs auth.
-        """
+    def validate_session(self, session_id: str, user_id: Optional[int] = None) -> Dict[str, Any]:
         return self._post("/session/validate", {
             "session_id": session_id,
             "user_id": user_id,
@@ -91,14 +75,11 @@ class SBEAEClient:
     def list_sessions(self, user_id: int) -> Dict[str, Any]:
         return self._post("/session/list", {"user_id": user_id})
 
-    # ── Events ─────────────────────────────────────────────────────────────
+    # ── Events ───────────────────────────────────────────────────────────────
 
-    def process_event(self, session_id: str, user_id: int,
-                      event_type: str, payload: dict = None) -> Dict[str, Any]:
-        """
-        Primary method for all CRM actions.
-        Returns {"status": "allow"|"deny"|"throttle", "risk_score": int, ...}
-        """
+    def process_event(
+        self, session_id: str, user_id: int, event_type: str, payload: dict = None
+    ) -> Dict[str, Any]:
         return self._post("/event/process", {
             "session_id": session_id,
             "user_id": user_id,
@@ -106,16 +87,35 @@ class SBEAEClient:
             "payload": payload or {},
         })
 
-    # ── Convenience: Django middleware integration ──────────────────────────
+    # ── Convenience ──────────────────────────────────────────────────────────
 
-    def is_allowed(self, session_id: str, user_id: int,
-                   event_type: str = "action") -> bool:
-        """
-        One-liner for Django views / DRF permission classes.
-        Returns True only if SBEAE says allow.
-        """
+    def is_allowed(self, session_id: str, user_id: int, event_type: str = "action") -> bool:
+        """One-liner for Django views / DRF permission classes."""
         try:
             result = self.process_event(session_id, user_id, event_type)
             return result.get("status") == "allow"
         except SBEAEError:
-            return False   # Fail closed
+            return False  # Fail closed
+
+    # ── Billing / Webhook ────────────────────────────────────────────────────
+
+    def process_payment_webhook(
+        self,
+        user_id: int,
+        payment_reference: str,
+        amount: float,
+        plan: str = "starter",
+        period: str = "monthly",
+    ) -> Dict[str, Any]:
+        """
+        Simulate or process a payment webhook.
+        Periods: monthly, quarterly, biannual, yearly
+        """
+        return self._post("/webhook/monnify", {
+            "user_id": user_id,
+            "paymentReference": payment_reference,
+            "amount": amount,
+            "plan": plan,
+            "period": period,
+        })
+        

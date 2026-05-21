@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comm Platform — Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('comm_dashboard.static', filename='css/dashboard.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📧 Comm Platform</h1>
+            <div class="nav">
+                <button class="active" onclick="showTab('mail')">Inbox</button>
+                <button onclick="showTab('sent')">Sent</button>
+                <button onclick="showTab('subscribers')">Subscribers</button>
+                <button onclick="showTab('stats')">Stats</button>
+            </div>
+        </header>
+
+        <div class="stats-grid" id="stats-row">
+            <div class="stat-card">
+                <h3>Inbox</h3>
+                <div class="value" id="stat-inbox-total">—</div>
+                <div class="sub">Total received</div>
+            </div>
+            <div class="stat-card">
+                <h3>Unread</h3>
+                <div class="value" id="stat-unread">—</div>
+                <div class="sub">Needs attention</div>
+            </div>
+            <div class="stat-card">
+                <h3>Sent</h3>
+                <div class="value" id="stat-sent">—</div>
+                <div class="sub">Total sent</div>
+            </div>
+            <div class="stat-card">
+                <h3>Active Subs</h3>
+                <div class="value" id="stat-active">—</div>
+                <div class="sub">Confirmed</div>
+            </div>
+        </div>
+
+        <!-- INBOX TAB -->
+        <div id="tab-mail" class="panel">
+            <div class="panel-header">
+                <h2>Inbox</h2>
+                <input type="text" class="search-box" id="mail-search" placeholder="Search messages..." onkeyup="if(event.key==='Enter')searchMail()">
+            </div>
+            <table>
+                <thead>
+                    <tr><th>Status</th><th>From</th><th>Subject</th><th>Preview</th><th>Received</th><th>Actions</th></tr>
+                </thead>
+                <tbody id="mail-list"><tr><td colspan="6" class="empty">Loading...</td></tr></tbody>
+            </table>
+        </div>
+
+        <!-- SENT TAB -->
+        <div id="tab-sent" class="panel hidden">
+            <div class="panel-header">
+                <h2>Sent Messages</h2>
+                <div style="display: flex; gap: 8px;">
+                    <select id="sender-filter" onchange="loadSent()" style="background: #0f172a; border: 1px solid #475569; color: #e2e8f0; padding: 6px 12px; border-radius: 6px;">
+                        <option value="">All Senders</option>
+                    </select>
+                    <button class="btn btn-success" onclick="openComposer()">+ Compose</button>
+                </div>
+            </div>
+            <div style="display: flex;">
+                <div id="sender-groups" style="width: 220px; border-right: 1px solid #334155; padding: 16px; min-height: 400px;">
+                    <h4 style="font-size: 12px; text-transform: uppercase; color: #94a3b8; margin-bottom: 12px;">Sender Groups</h4>
+                    <div id="sender-group-list">Loading...</div>
+                </div>
+                <div style="flex: 1;">
+                    <table>
+                        <thead>
+                            <tr><th>To</th><th>Subject</th><th>Status</th><th>Category</th><th>Sent</th></tr>
+                        </thead>
+                        <tbody id="sent-list"><tr><td colspan="5" class="empty">Loading...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- COMPOSER MODAL -->
+        <div class="modal-overlay" id="composer-modal" onclick="if(event.target===this)closeComposer()">
+            <div class="modal" style="max-width: 600px;">
+                <div class="modal-header">
+                    <h3>✉️ Compose Email</h3>
+                    <button class="close-btn" onclick="closeComposer()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="compose-form" onsubmit="return sendEmail(event)">
+                        <div style="margin-bottom: 12px;">
+                            <label style="display: block; font-size: 12px; color: #94a3b8; margin-bottom: 4px;">From</label>
+                            <select id="compose-from" style="width: 100%; background: #0f172a; border: 1px solid #475569; color: #e2e8f0; padding: 8px; border-radius: 6px;">
+                                <option value="admin@atrivix.com" data-name="Atrivix Admin">Atrivix Admin &lt;admin@atrivix.com&gt;</option>
+                                <option value="support@atrivix.com" data-name="Atrivix Support">Atrivix Support &lt;support@atrivix.com&gt;</option>
+                                <option value="noreply@atrivix.com" data-name="Atrivix">Atrivix &lt;noreply@atrivix.com&gt;</option>
+                            </select>
+                        </div>
+                        <div style="margin-bottom: 12px;">
+                            <label style="display: block; font-size: 12px; color: #94a3b8; margin-bottom: 4px;">To</label>
+                            <input type="email" id="compose-to" required style="width: 100%; background: #0f172a; border: 1px solid #475569; color: #e2e8f0; padding: 8px; border-radius: 6px;" placeholder="recipient@example.com">
+                        </div>
+                        <div style="margin-bottom: 12px;">
+                            <label style="display: block; font-size: 12px; color: #94a3b8; margin-bottom: 4px;">Subject</label>
+                            <input type="text" id="compose-subject" required style="width: 100%; background: #0f172a; border: 1px solid #475569; color: #e2e8f0; padding: 8px; border-radius: 6px;">
+                        </div>
+                        <div style="margin-bottom: 12px;">
+                            <label style="display: block; font-size: 12px; color: #94a3b8; margin-bottom: 4px;">Category</label>
+                            <select id="compose-category" style="width: 100%; background: #0f172a; border: 1px solid #475569; color: #e2e8f0; padding: 8px; border-radius: 6px;">
+                                <option value="transactional">Transactional</option>
+                                <option value="marketing">Marketing</option>
+                                <option value="support">Support</option>
+                                <option value="notification">Notification</option>
+                            </select>
+                        </div>
+                        <div style="margin-bottom: 12px;">
+                            <label style="display: block; font-size: 12px; color: #94a3b8; margin-bottom: 4px;">Body (HTML)</label>
+                            <textarea id="compose-html" rows="6" style="width: 100%; background: #0f172a; border: 1px solid #475569; color: #e2e8f0; padding: 8px; border-radius: 6px; font-family: monospace;" placeholder="<p>Your message here...</p>"></textarea>
+                        </div>
+                        <div style="margin-bottom: 12px;">
+                            <label style="display: block; font-size: 12px; color: #94a3b8; margin-bottom: 4px;">Body (Plain Text)</label>
+                            <textarea id="compose-text" rows="3" style="width: 100%; background: #0f172a; border: 1px solid #475569; color: #e2e8f0; padding: 8px; border-radius: 6px;" placeholder="Plain text fallback..."></textarea>
+                        </div>
+                        <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                            <button type="button" class="btn" style="background: #475569;" onclick="closeComposer()">Cancel</button>
+                            <button type="submit" class="btn btn-success">Send</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- SUBSCRIBERS TAB -->
+        <div id="tab-subscribers" class="panel hidden">
+            <div class="panel-header">
+                <h2>Subscribers</h2>
+                <input type="text" class="search-box" id="sub-search" placeholder="Filter by tag or plan..." onkeyup="if(event.key==='Enter')loadSubscribers()">
+            </div>
+            <table>
+                <thead>
+                    <tr><th>Email</th><th>Status</th><th>Plan</th><th>Tags</th><th>Source</th><th>Joined</th><th>Actions</th></tr>
+                </thead>
+                <tbody id="sub-list"><tr><td colspan="7" class="empty">Loading...</td></tr></tbody>
+            </table>
+        </div>
+
+        <!-- STATS TAB -->
+        <div id="tab-stats" class="panel hidden">
+            <div class="panel-header"><h2>Detailed Statistics</h2></div>
+            <div style="padding: 20px;">
+                <div class="tabs">
+                    <div class="tab active" onclick="showSubTab('msg-stats')">Inbox</div>
+                    <div class="tab" onclick="showSubTab('sent-stats')">Sent</div>
+                    <div class="tab" onclick="showSubTab('sub-stats')">Subscribers</div>
+                </div>
+                <div id="subtab-msg-stats"><pre id="msg-stats-json">Loading...</pre></div>
+                <div id="subtab-sent-stats" class="hidden"><pre id="sent-stats-json">Loading...</pre></div>
+                <div id="subtab-sub-stats" class="hidden"><pre id="sub-stats-json">Loading...</pre></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Message View Modal -->
+    <div class="modal-overlay" id="msg-modal" onclick="if(event.target===this)closeModal()">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modal-subject">Message</h3>
+                <button class="close-btn" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p><strong>From:</strong> <span id="modal-from"></span></p>
+                <p><strong>To:</strong> <span id="modal-to"></span></p>
+                <p><strong>Received:</strong> <span id="modal-date"></span></p>
+                <hr style="border: none; border-top: 1px solid #334155; margin: 16px 0;">
+                <pre id="modal-body"></pre>
+                <div id="modal-html" style="margin-top: 16px; padding: 16px; background: white; color: black; border-radius: 8px; display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast"></div>
+
+    <script src="{{ url_for('comm_dashboard.static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>
+

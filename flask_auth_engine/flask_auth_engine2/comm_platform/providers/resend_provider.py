@@ -17,8 +17,8 @@ class ResendProvider(EmailProvider):
     def name(self) -> str:
         return "resend"
 
-    def verify(self, payload: Dict[str, Any], signature: str) -> bool:
-        return WebhookGuard.verify_resend(signature)
+    def verify(self, raw_body: bytes, signature: str) -> bool:
+        return WebhookGuard.verify_resend(raw_body, signature)
 
     def receive(self, payload: Dict[str, Any], signature: str) -> Dict[str, Any]:
         """

@@ -2,9 +2,14 @@
 import os
 import requests
 from typing import Any, Dict, Optional
+from dotenv import load_dotenv
+load_dotenv()  # Loads .env file into os.environ
 
 SBEAE_BASE_URL = os.getenv("SBEAE_URL", "http://127.0.0.1:5050")
-SBEAE_SECRET = os.getenv("DJANGO_SHARED_SECRET", "django-flask-shared-secret")
+SBEAE_SECRET = os.getenv("DJANGO_SHARED_SECRET")
+if not SBEAE_SECRET:
+    raise ValueError("DJANGO_SHARED_SECRET environment variable is required")
+
 
 
 class SBEAEError(Exception):

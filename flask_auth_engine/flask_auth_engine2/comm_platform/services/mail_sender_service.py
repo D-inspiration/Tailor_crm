@@ -8,6 +8,8 @@ from typing import Optional, List
 from comm_platform.repositories.sent_message_repo import SentMessageRepository
 from comm_platform.models.sent_message import SentMessage
 from comm_platform.core.config import CommConfig
+from dotenv import load_dotenv
+load_dotenv()  # Loads .env file into os.environ
 
 
 class MailSenderService:
@@ -16,7 +18,10 @@ class MailSenderService:
     Sends via Resend REST API and logs to SentMessage for tracking.
     """
 
-    RESEND_API_URL = "https://api.resend.com/emails"
+    RESEND_API_URL = os.getenv("RESEND_API_URL")
+    if not RESEND_API_URL:
+        raise ValueError("RESEND_API_URL environment variable is needed")
+
 
     def __init__(self):
         self._repo = SentMessageRepository()

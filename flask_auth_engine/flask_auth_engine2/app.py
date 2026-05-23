@@ -52,6 +52,13 @@ def create_app(config_class=Config) -> Flask:
     def internal_error(_e):
         logger.exception("Unhandled exception")
         return jsonify({"error": "internal_server_error"}), 500
+        
+    import os
+
+    print("=== ENV SNAPSHOT ===")
+    for k, v in os.environ.items():
+        if "SECRET" in k or "DATABASE" in k or "RESEND" in k:
+            print(k, "=", "***" if v else None)
 
     with app.app_context():
         db.create_all()

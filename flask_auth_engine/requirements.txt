@@ -5,3 +5,6 @@ werkzeug>=2.3
 requests>=2.31
 pytest>=7.4
 pytest-flask>=1.2
+gunicorn
+python-dotenv
+psycopg2-binary

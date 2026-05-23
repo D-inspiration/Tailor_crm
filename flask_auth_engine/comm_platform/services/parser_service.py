@@ -3,6 +3,7 @@ Parser service — normalizes raw webhook payloads into domain objects.
 Orchestrates provider selection and message creation.
 """
 
+import json
 from typing import Dict, Any, Type
 from ..providers.base import EmailProvider
 from ..providers.resend_provider import ResendProvider
@@ -26,11 +27,7 @@ class ParserService:
     def __init__(self):
         self._provider: EmailProvider | None = None
 
-    # ------------------------------------------------------------------
-    # Provider resolution
-    # ------------------------------------------------------------------
     def resolve(self, provider_name: str) -> EmailProvider:
-        """Factory method — returns polymorphic provider instance."""
         provider_class = self._registry.get(provider_name)
         if not provider_class:
             raise ValueError(f"Unknown provider: {provider_name}")
@@ -38,7 +35,6 @@ class ParserService:
         return self._provider
 
     def detect_provider(self, headers: Dict[str, str]) -> str:
-        """Auto-detect provider from HTTP headers."""
         user_agent = headers.get("User-Agent", "").lower()
         if "resend" in user_agent:
             return ProviderType.RESEND.value
@@ -46,17 +42,17 @@ class ParserService:
             return ProviderType.SES.value
         if "postal" in user_agent:
             return ProviderType.POSTAL.value
-        return ProviderType.RESEND.value  # Default
+        return ProviderType.RESEND.value
 
-    # ------------------------------------------------------------------
-    # Processing
-    # ------------------------------------------------------------------
-    def parse(self, payload: Dict[str, Any], signature: str, provider_name: str) -> Dict[str, Any]:
-        """
-        Full parse pipeline: verify → normalize.
-        Returns dict ready for MessageRepository.create().
-        """
+    def parse(self, raw_body: bytes, signature: str, provider_name: str) -> Dict[str, Any]:
         provider = self.resolve(provider_name)
-        if not provider.verify(payload, signature):
+
+        # 🔐 verify FIRST using raw body
+        if not provider.verify(raw_body, signature):
             raise PermissionError("Webhook signature verification failed")
+
+        # 📦 decode AFTER verification
+        payload = json.loads(raw_body.decode("utf-8"))
+
+        # 🔄 normalize
         return provider.receive(payload, signature)

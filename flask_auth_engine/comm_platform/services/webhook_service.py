@@ -26,33 +26,40 @@ class WebhookService:
     # ------------------------------------------------------------------
     # Pipeline
     # ------------------------------------------------------------------
-    def process(self, payload, signature, headers):
-    
-        print("RAW PAYLOAD:", payload)
-    
+    def process(self, raw_body, payload, signature, headers):
+
+        print("RAW BODY:", raw_body)
+        print("PAYLOAD:", payload)
+
         provider_name = self._parser.detect_provider(headers)
-    
+
         print("PROVIDER:", provider_name)
-    
+
         self._log = WebhookLog(
             payload=str(payload),
             provider=provider_name,
             signature=signature,
         ).save()
-    
+
         try:
-            normalized = self._parser.parse(payload, signature, provider_name)
-    
+            # 🔥 IMPORTANT CHANGE: pass raw_body down
+            normalized = self._parser.parse(raw_body, signature, provider_name)
+
             print("NORMALIZED:", normalized)
-    
+
         except Exception as e:
             print("PARSE ERROR:", str(e))
-            return {"error": "parse_failed", "reason": str(e)}, 400
-    
+            return {
+                "status": "error",
+                "error": "parse_failed",
+                "reason": str(e),
+                "code": 400
+            }
+
         message = self._mail.ingest(normalized)
-    
+
         print("MESSAGE:", message)
-    
+
         return {
             "status": "accepted",
             "message_id": getattr(message, "id", None),
